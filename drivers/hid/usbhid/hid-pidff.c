@@ -925,7 +925,7 @@ static int pidff_find_fields(struct pidff_usage *usage, const u8 *table,
 				pr_debug("maxusage and report_count do not match, skipping\n");
 				continue;
 			}
-			pr_debug("find fields 3")
+			pr_debug("find fields 3");
 			for (j = 0; j < report->field[i]->maxusage; j++) {
 				pr_info("find fields 4");
 				if (report->field[i]->usage[j].hid ==

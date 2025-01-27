@@ -21,7 +21,7 @@ static const u8 *moza_report_fixup(struct hid_device *hdev, __u8 *rdesc,
 {
 	int i;
 
-	for(i =0; i < *rsize; i++) {
+	for(i = 0; i < *rsize; i++) {
 		if (rdesc[0] == 0xa1 && rdesc[1] == 0x5f) {
 			rdesc[1] = 0x4f;
 			break;
