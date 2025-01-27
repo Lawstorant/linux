@@ -1059,7 +1059,7 @@ static struct hid_field *pidff_find_special_field(struct hid_report *report,
 						  int usage, int enforce_min)
 {
 	if (!report) {
-		pr_dbg("pidff_find_special_field, null report\n");
+		pr_debug("pidff_find_special_field, null report\n");
 		return NULL;
 	}
 
