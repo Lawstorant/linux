@@ -281,6 +281,21 @@ static void pidff_set_time(struct pidff_usage *usage, u16 time)
 	usage->value[0] = modified_time;
 }
 
+static void pidff_set_duration(struct pidff_usage *usage, u16 duration)
+{
+	/* Convert infinite length from Linux API (0)
+	   to PID standard (NULL) if needed */
+	if (duration == 0)
+		duration = PID_INFINITE;
+
+	if (duration == PID_INFINITE) {
+		usage->value[0] = PID_INFINITE;
+		return;
+	}
+
+	pidff_set_time(usage, duration);
+}
+
 /*
  * Send envelope report to the device
  */
@@ -371,10 +386,8 @@ static void pidff_set_effect_report(struct pidff_device *pidff,
 	pidff->set_effect_type->value[0] =
 		pidff->create_new_effect_type->value[0];
 
-	/* Convert infinite length from Linux API (0)
-	   to PID standard (NULL) if needed */
-	pidff->set_effect[PID_DURATION].value[0] =
-		effect->replay.length == 0 ? PID_INFINITE : effect->replay.length;
+	pidff_set_duration(&pidff->set_effect[PID_DURATION],
+		effect->replay.length);
 
 	pidff->set_effect[PID_TRIGGER_BUTTON].value[0] = effect->trigger.button;
 	pidff_set_time(&pidff->set_effect[PID_TRIGGER_REPEAT_INT],
