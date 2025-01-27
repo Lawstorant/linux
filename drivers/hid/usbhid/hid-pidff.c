@@ -45,7 +45,7 @@
 #define PID_SET_RAMP		12
 static const u8 pidff_reports[] = {
 	0x21, 0x77, 0x7d, 0x7f, 0x89, 0x90, 0x96, 0xab,
-	0x5a, 0x5f, 0x6e, 0x73, 0x74
+	0x5a, 0x5f, 0x6e, 0x73, 0x4f
 };
 
 /* device_control is really 0x95, but 0x96 specified as it is the usage of
@@ -913,6 +913,10 @@ static void pidff_set_autocenter(struct input_dev *dev, u16 magnitude)
 static int pidff_find_fields(struct pidff_usage *usage, const u8 *table,
 			     struct hid_report *report, int count, int strict)
 {
+	if (!report) {
+		pr_info("null report");
+		return -1;
+	}
 	int i, j, k, found;
 	int return_value = 0;
 	pr_info("find fields 1");
@@ -920,17 +924,21 @@ static int pidff_find_fields(struct pidff_usage *usage, const u8 *table,
 		found = 0;
 		pr_info("find fields 2");
 		for (i = 0; i < report->maxfield; i++) {
+			pr_info("find fields 30");
+			if (!report->field[i])
+				pr_info("sraka dupa");
 			if (report->field[i]->maxusage !=
 			    report->field[i]->report_count) {
-				pr_debug("maxusage and report_count do not match, skipping\n");
+				pr_info("find fields 40");
+				pr_info("maxusage and report_count do not match, skipping\n");
 				continue;
 			}
-			pr_debug("find fields 3");
+			pr_info("find fields 3");
 			for (j = 0; j < report->field[i]->maxusage; j++) {
 				pr_info("find fields 4");
 				if (report->field[i]->usage[j].hid ==
 				    (HID_UP_PID | table[k])) {
-					pr_debug("found %d at %d->%d\n",
+					pr_info("found %d at %d->%d\n",
 						 k, i, j);
 					pr_info("find fields 5");
 					usage[k].field = report->field[i];
@@ -946,17 +954,17 @@ static int pidff_find_fields(struct pidff_usage *usage, const u8 *table,
 				break;
 		}
 		if (!found && table[k] == pidff_set_effect[PID_START_DELAY]) {
-			pr_debug("Delay field not found, but that's OK\n");
-			pr_debug("Setting MISSING_DELAY quirk\n");
+			pr_info("Delay field not found, but that's OK\n");
+			pr_info("Setting MISSING_DELAY quirk\n");
 			return_value |= HID_PIDFF_QUIRK_MISSING_DELAY;
 		}
 		else if (!found && table[k] == pidff_set_condition[PID_PARAM_BLOCK_OFFSET]) {
-			pr_debug("PBO field not found, but that's OK\n");
-			pr_debug("Setting MISSING_PBO quirk\n");
+			pr_info("PBO field not found, but that's OK\n");
+			pr_info("Setting MISSING_PBO quirk\n");
 			return_value |= HID_PIDFF_QUIRK_MISSING_PBO;
 		}
 		else if (!found && strict) {
-			pr_debug("failed to locate %d\n", k);
+			pr_info("failed to locate %d\n", k);
 			return -1;
 		}
 	}
