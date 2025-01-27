@@ -16,6 +16,21 @@
 
 #define JOY_RANGE (BTN_DEAD - BTN_JOYSTICK + 1)
 
+static const u8 *moza_report_fixup(struct hid_device *hdev, __u8 *rdesc,
+		      unsigned int *rsize)
+{
+	int i;
+
+	for(i =0; i < *rsize; i++) {
+		if (rdesc[0] == 0xa1 && rdesc[1] == 0x5f) {
+			rdesc[1] = 0x4f;
+			break;
+		}
+	}
+
+	return rdesc;
+}
+
 /*
  * Map buttons manually to extend the default joystick button limit
  */
@@ -187,7 +202,8 @@ static struct hid_driver universal_pidff = {
 	.id_table = universal_pidff_devices,
 	.input_mapping = universal_pidff_input_mapping,
 	.probe = universal_pidff_probe,
-	.input_configured = universal_pidff_input_configured
+	.input_configured = universal_pidff_input_configured,
+	.report_fixup = moza_report_fixup
 };
 module_hid_driver(universal_pidff);
 

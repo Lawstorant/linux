@@ -915,23 +915,29 @@ static int pidff_find_fields(struct pidff_usage *usage, const u8 *table,
 {
 	int i, j, k, found;
 	int return_value = 0;
-
+	pr_info("find fields 1");
 	for (k = 0; k < count; k++) {
 		found = 0;
+		pr_info("find fields 2");
 		for (i = 0; i < report->maxfield; i++) {
 			if (report->field[i]->maxusage !=
 			    report->field[i]->report_count) {
 				pr_debug("maxusage and report_count do not match, skipping\n");
 				continue;
 			}
+			pr_debug("find fields 3")
 			for (j = 0; j < report->field[i]->maxusage; j++) {
+				pr_info("find fields 4");
 				if (report->field[i]->usage[j].hid ==
 				    (HID_UP_PID | table[k])) {
 					pr_debug("found %d at %d->%d\n",
 						 k, i, j);
+					pr_info("find fields 5");
 					usage[k].field = report->field[i];
+					pr_info("find fields 6");
 					usage[k].value =
 						&report->field[i]->value[j];
+					pr_info("find fields 7");
 					found = 1;
 					break;
 				}
@@ -954,6 +960,7 @@ static int pidff_find_fields(struct pidff_usage *usage, const u8 *table,
 			return -1;
 		}
 	}
+	pr_info("find fields 8");
 	return return_value;
 }
 
@@ -1263,6 +1270,7 @@ static int pidff_init_fields(struct pidff_device *pidff, struct input_dev *dev)
 	if (pidff_find_special_fields(pidff) || pidff_find_effects(pidff, dev))
 		return -ENODEV;
 
+	pr_info("SET ENVELOPE");
 	if (PIDFF_FIND_FIELDS(set_envelope, PID_SET_ENVELOPE, 1)) {
 		if (test_and_clear_bit(FF_CONSTANT, dev->ffbit))
 			hid_warn(pidff->hid,
@@ -1276,18 +1284,21 @@ static int pidff_init_fields(struct pidff_device *pidff, struct input_dev *dev)
 				 "has periodic effect but no envelope\n");
 	}
 
+	pr_info("SET CONSTANT");
 	if (test_bit(FF_CONSTANT, dev->ffbit) &&
 	    PIDFF_FIND_FIELDS(set_constant, PID_SET_CONSTANT, 1)) {
 		hid_warn(pidff->hid, "unknown constant effect layout\n");
 		clear_bit(FF_CONSTANT, dev->ffbit);
 	}
 
+	pr_info("SET RAMP");
 	if (test_bit(FF_RAMP, dev->ffbit) &&
 	    PIDFF_FIND_FIELDS(set_ramp, PID_SET_RAMP, 1)) {
 		hid_warn(pidff->hid, "unknown ramp effect layout\n");
 		clear_bit(FF_RAMP, dev->ffbit);
 	}
 
+	pr_info("SET CONDITION");
 	if (test_bit(FF_SPRING, dev->ffbit) ||
 	    test_bit(FF_DAMPER, dev->ffbit) ||
 	    test_bit(FF_FRICTION, dev->ffbit) ||
@@ -1304,6 +1315,7 @@ static int pidff_init_fields(struct pidff_device *pidff, struct input_dev *dev)
 		pidff->quirks |= status;
 	}
 
+	pr_info("SET PERIODIC");
 	if (test_bit(FF_PERIODIC, dev->ffbit) &&
 	    PIDFF_FIND_FIELDS(set_periodic, PID_SET_PERIODIC, 1)) {
 		hid_warn(pidff->hid, "unknown periodic effect layout\n");
@@ -1312,6 +1324,7 @@ static int pidff_init_fields(struct pidff_device *pidff, struct input_dev *dev)
 
 	PIDFF_FIND_FIELDS(pool, PID_POOL, 0);
 
+	pr_info("SET GAIN");
 	if (!PIDFF_FIND_FIELDS(device_gain, PID_DEVICE_GAIN, 1))
 		set_bit(FF_GAIN, dev->ffbit);
 
