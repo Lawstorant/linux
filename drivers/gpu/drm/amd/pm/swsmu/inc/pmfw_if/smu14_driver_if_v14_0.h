@@ -846,9 +846,10 @@ typedef struct {
   uint16_t               FanTargetTemperature; // Degree Celcius
   //zero fan
   uint8_t                FanZeroRpmEnable;
+  uint8_t                FanZeroRpmStopTemp;
   //temperature
   uint8_t                MaxOpTemp;
-  uint8_t                Padding1[2];
+  uint8_t                Padding1;
 
   //Full Ctrl
   uint16_t               GfxVoltageFullCtrlMode;
