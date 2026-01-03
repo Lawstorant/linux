@@ -760,11 +760,13 @@ static void hidinput_configure_usage(struct hid_input *hidinput, struct hid_fiel
 		case HID_GD_MOUSE:
 		case HID_GD_POINTER:  code += BTN_MOUSE; break;
 		case HID_GD_JOYSTICK:
-				if (code <= 0xf)
-					code += BTN_JOYSTICK;
-				else
-					code += BTN_TRIGGER_HAPPY - 0x10;
-				break;
+			input->num_buttons++;
+			code += BTN_JOYSTICK;
+			if (code > BTN_DEAD)
+				code += BTN_TRIGGER_HAPPY - BTN_DEAD - 1;
+			if (code >= KEY_MAX)
+				code = KEY_RESERVED;
+			break;
 		case HID_GD_GAMEPAD:
 				if (code <= 0xf)
 					code += BTN_GAMEPAD;
@@ -1395,6 +1397,8 @@ mapped:
 	}
 
 	set_bit(usage->type, input->evbit);
+	if (usage->type == EV_KEY && field->application == HID_GD_JOYSTICK)
+		set_bit(EV_BTN, input->evbit);
 
 	/*
 	 * This part is *really* controversial:
@@ -1406,12 +1410,18 @@ mapped:
 	 *   *_MISC+N to overwrite a legitimate even, which confuses userspace
 	 *   (for instance ABS_MISC + 7 is ABS_MT_SLOT, which has a different
 	 *   processing)
+	 * - Joysticks can have arbitrary number of buttons without defined
+	 *   usages. Buttons that extend beyond KEY_MAX are assigned to
+	 *   KEY_RESERVED thus deduplication must be disabled for them.
 	 *
 	 * If devices still want to use this (at their own risk), they will
 	 * have to use the quirk HID_QUIRK_INCREMENT_USAGE_ON_DUPLICATE, but
 	 * the default should be a reliable mapping.
 	 */
 	while (usage->code <= max && test_and_set_bit(usage->code, bit)) {
+		if (usage->code == KEY_RESERVED && test_bit(EV_BTN, input->evbit))
+			break;
+
 		if (device->quirks & HID_QUIRK_INCREMENT_USAGE_ON_DUPLICATE) {
 			usage->code = find_next_zero_bit(bit,
 							 max + 1,
