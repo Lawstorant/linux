@@ -42,6 +42,7 @@
 #define EV_ABS			0x03
 #define EV_MSC			0x04
 #define EV_SW			0x05
+#define EV_BTN			0x06
 #define EV_LED			0x11
 #define EV_SND			0x12
 #define EV_REP			0x14
@@ -950,6 +951,14 @@
 #define SW_USB_INSERT		0x11  /* set = USB audio device connected */
 #define SW_MAX			0x11
 #define SW_CNT			(SW_MAX+1)
+
+/*
+ * BTN events
+ */
+
+#define BTN_NUM			0x0
+#define BTN_MAX			0x0
+#define BTN_CNT			(BTN_MAX+1)
 
 /*
  * Misc events
