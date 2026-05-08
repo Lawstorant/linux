@@ -250,6 +250,7 @@ static struct timing_generator_funcs dcn42_tg_funcs = {
 		.wait_otg_disable = optc35_wait_otg_disable,
 		.set_out_mux = optc401_set_out_mux,
 		.set_drr_trigger_window = optc3_set_drr_trigger_window,
+		.set_vstartup_dsc_frl = optc3_set_vstartup_dsc_frl,
 		.set_vtotal_change_limit = optc3_set_vtotal_change_limit,
 		.set_gsl = optc2_set_gsl,
 		.set_gsl_source_select = optc2_set_gsl_source_select,

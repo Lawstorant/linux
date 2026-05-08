@@ -295,6 +295,17 @@ static bool validate_dsc_caps_on_connector(struct amdgpu_dm_connector *aconnecto
 	if (!aconnector->dsc_aux)
 		return false;
 
+	if (port->passthrough_aux &&
+	    aconnector->dc_link->dc->caps.dp_hdmi21_pcon_support &&
+	    dc_sink->edid_caps.frl_dsc_support &&
+	    dc_sink->edid_caps.max_frl_rate > 0 &&
+	    dc_sink->edid_caps.frl_dsc_max_frl_rate > 0) {
+		dc_dsc_parse_dsc_edid(aconnector->dc_link->ctx->dc,
+				      &dc_sink->edid_caps, &dc_sink->dsc_caps.dsc_dec_caps);
+		DRM_DEBUG_DRIVER("%s: [%s] DSC is selected from FRL RX\n", __func__, aconnector->base.name);
+		return true;
+	} else {
+		DRM_DEBUG_DRIVER("%s: [%s] DSC is selected from DP-HDMI PCON\n", __func__, aconnector->base.name);
 	if (drm_dp_dpcd_read(aconnector->dsc_aux, DP_DSC_SUPPORT, dsc_caps, 16) < 0)
 		return false;
 
@@ -307,6 +318,7 @@ static bool validate_dsc_caps_on_connector(struct amdgpu_dm_connector *aconnecto
 				  &dc_sink->dsc_caps.dsc_dec_caps))
 		return false;
 
+	}
 	return true;
 }
 #endif

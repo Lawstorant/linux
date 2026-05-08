@@ -595,6 +595,7 @@ static const struct timing_generator_funcs dcn35_tg_funcs = {
 		.set_h_timing_div_manual_mode = optc32_set_h_timing_div_manual_mode,
 		.set_out_mux = optc3_set_out_mux,
 		.set_drr_trigger_window = optc3_set_drr_trigger_window,
+		.set_vstartup_dsc_frl = optc3_set_vstartup_dsc_frl,
 		.set_vtotal_change_limit = optc3_set_vtotal_change_limit,
 		.set_gsl = optc2_set_gsl,
 		.set_gsl_source_select = optc2_set_gsl_source_select,

@@ -183,8 +183,15 @@ enum dc_edid_status dm_helpers_parse_edid_caps(
 		edid_caps->hdmi_vrr = connector->display_info.hdmi.vrr_cap.supported;
 	}
 
-	if (edid_caps->edid_hdmi)
+	if (edid_caps->edid_hdmi) {
 		populate_hdmi_info_from_connector(&connector->display_info.hdmi, edid_caps);
+		drm_dbg_driver(connector->dev, "%s: HDMI_FRL [%s] max_frl_rate %d\n", __func__, connector->name, edid_caps->max_frl_rate);
+		if (edid_caps->frl_dsc_support)
+			drm_dbg_driver(connector->dev, "%s: HDMI_FRL_DSC [%s] frl_dsc_10bpc %d, frl_dsc_12bpc %d, frl_dsc_all_bpp %d, frl_dsc_native_420 %d, frl_dsc_max_slices %d, frl_dsc_max_frl_rate %d, frl_dsc_total_chunk_kbytes %d\n",
+					__func__, connector->name, edid_caps->frl_dsc_10bpc, edid_caps->frl_dsc_12bpc, \
+					edid_caps->frl_dsc_all_bpp, edid_caps->frl_dsc_native_420, edid_caps->frl_dsc_max_slices, \
+					edid_caps->frl_dsc_max_frl_rate, edid_caps->frl_dsc_total_chunk_kbytes);
+	}
 
 	apply_edid_quirks(dev, edid_buf, edid_caps);
 
@@ -901,8 +908,23 @@ bool dm_helpers_dp_write_dsc_enable(
 		port = aconnector->mst_output_port;
 
 		if (enable) {
-			if (port->passthrough_aux) {
-				ret = drm_dp_dpcd_write(port->passthrough_aux,
+			if (port->passthrough_aux
+			    || (stream->timing.dsc_cfg.is_frl &&
+				(!stream->sink->dsc_caps.dsc_dec_caps.is_frl ||
+				(stream->sink->dsc_caps.dsc_dec_caps.is_frl &&
+				aconnector->mst_downstream_port_present.fields.PORT_PRESENT &&
+				aconnector->mst_downstream_port_caps.bytes.byte0.bits.DWN_STRM_PORTX_TYPE ==
+				DOWN_STREAM_DETAILED_HDMI)))
+			    ) {
+				if (!stream->sink->dsc_caps.dsc_dec_caps.is_frl)
+					/* DSC passthrough to DP receiver */
+					enable_passthrough = DSC_DECODING;
+				else if (aconnector->mst_downstream_port_present.fields.PORT_PRESENT &&
+					 aconnector->mst_downstream_port_caps.bytes.byte0.bits.DWN_STRM_PORTX_TYPE ==
+					 DOWN_STREAM_DETAILED_HDMI)
+					/* DSC passthrough to FRL sink */
+					enable_passthrough = DSC_PASSTHROUGH;
+				ret = drm_dp_dpcd_write(&aconnector->mst_output_port->aux,
 							DP_DSC_ENABLE,
 							&enable_passthrough, 1);
 				drm_dbg_dp(dev,
@@ -926,8 +948,13 @@ bool dm_helpers_dp_write_dsc_enable(
 				   "virtual dpcd",
 				   ret);
 
-			if (port->passthrough_aux) {
-				ret = drm_dp_dpcd_write(port->passthrough_aux,
+			if (port->passthrough_aux
+			    || (stream->timing.dsc_cfg.is_frl &&
+				(!stream->sink->dsc_caps.dsc_dec_caps.is_frl ||
+				 (aconnector->mst_downstream_port_present.fields.PORT_PRESENT &&
+				  aconnector->mst_downstream_port_caps.bytes.byte0.bits.DWN_STRM_PORTX_TYPE ==
+				  DOWN_STREAM_DETAILED_HDMI)))) {
+				ret = drm_dp_dpcd_write(&aconnector->mst_output_port->aux,
 							DP_DSC_ENABLE,
 							&enable_passthrough, 1);
 				drm_dbg_dp(dev,
@@ -944,10 +971,22 @@ bool dm_helpers_dp_write_dsc_enable(
 				   "SST_DSC Send DSC %s to SST RX\n",
 				   enable_dsc ? "enable" : "disable");
 		} else if (stream->sink->link->dpcd_caps.dongle_type == DISPLAY_DONGLE_DP_HDMI_CONVERTER) {
+			if (enable) {
+				if (stream->timing.dsc_cfg.is_frl) {
+					enable_dsc = DSC_PASSTHROUGH;
+				} else {
+					enable_dsc = DSC_DECODING;
+				}
+				drm_dbg_dp(dev,
+					  "SST_DSC Sent DSC decoding enable to %s port, ret = %u\n",
+					  (port->passthrough_aux) ?
+					  "remote HDMI FRL RX" :
+					  "DP-HDMI PCON", ret);
+			} else {
+				enable_dsc = DSC_DISABLE;
+				drm_dbg_dp(dev, "SST_DSC Send DSC disable to DP-HDMI PCON\n");
+			}
 			ret = dm_helpers_dp_write_dpcd(ctx, stream->link, DP_DSC_ENABLE, &enable_dsc, 1);
-			drm_dbg_dp(dev,
-				   "SST_DSC Send DSC %s to DP-HDMI PCON\n",
-				   enable_dsc ? "enable" : "disable");
 		}
 	}
 
@@ -1098,10 +1137,46 @@ static uint8_t get_max_frl_rate(uint8_t max_lanes, uint8_t max_rate_per_lane)
 	return max_frl_rate;
 }
 
+static uint8_t get_dsc_max_slices(uint8_t max_slices, int clk_per_slice)
+{
+	uint8_t dsc_max_slices;
+
+	if ((max_slices == 1) && (clk_per_slice == 340))
+		dsc_max_slices = 1;
+	else if ((max_slices == 2) && (clk_per_slice == 340))
+		dsc_max_slices = 2;
+	else if ((max_slices == 4) && (clk_per_slice == 340))
+		dsc_max_slices = 3;
+	else if ((max_slices == 8) && (clk_per_slice == 340))
+		dsc_max_slices = 4;
+	else if ((max_slices == 8) && (clk_per_slice == 400))
+		dsc_max_slices = 5;
+	else if ((max_slices == 12) && (clk_per_slice == 400))
+		dsc_max_slices = 6;
+	else if ((max_slices == 16) && (clk_per_slice == 400))
+		dsc_max_slices = 7;
+	else
+		dsc_max_slices = 0;
+
+	return dsc_max_slices;
+}
+
 void populate_hdmi_info_from_connector(struct drm_hdmi_info *hdmi, struct dc_edid_caps *edid_caps)
 {
 	edid_caps->scdc_present = hdmi->scdc.supported;
 	edid_caps->max_frl_rate = get_max_frl_rate(hdmi->max_lanes, hdmi->max_frl_rate_per_lane);
+	edid_caps->frl_dsc_support = hdmi->dsc_cap.v_1p2;
+	if (edid_caps->frl_dsc_support) {
+		if (hdmi->dsc_cap.bpc_supported == 10)
+			edid_caps->frl_dsc_10bpc = true;
+		else if (hdmi->dsc_cap.bpc_supported == 12)
+			edid_caps->frl_dsc_12bpc = true;
+		edid_caps->frl_dsc_all_bpp = hdmi->dsc_cap.all_bpp;
+		edid_caps->frl_dsc_native_420 = hdmi->dsc_cap.native_420;
+		edid_caps->frl_dsc_max_slices = get_dsc_max_slices(hdmi->dsc_cap.max_slices, hdmi->dsc_cap.clk_per_slice);
+		edid_caps->frl_dsc_max_frl_rate = get_max_frl_rate(hdmi->dsc_cap.max_lanes, hdmi->dsc_cap.max_frl_rate_per_lane);
+		edid_caps->frl_dsc_total_chunk_kbytes = hdmi->dsc_cap.total_chunk_kbytes;
+	}
 }
 
 enum dc_edid_status dm_helpers_read_local_edid(
