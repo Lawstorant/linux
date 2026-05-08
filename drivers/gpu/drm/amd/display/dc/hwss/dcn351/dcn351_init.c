@@ -101,7 +101,6 @@ static const struct hw_sequencer_funcs dcn351_funcs = {
 	.get_vupdate_offset_from_vsync = dcn10_get_vupdate_offset_from_vsync,
 	.calc_vupdate_position = dcn10_calc_vupdate_position,
 	.setup_hdmi_frl_link = dcn30_setup_hdmi_frl_link,
-	.set_vstartup_dsc_frl = dcn30_hw_set_vstartup_dsc_frl,
 	.set_backlight_level = dcn31_set_backlight_level,
 	.set_abm_immediate_disable = dcn21_set_abm_immediate_disable,
 	.set_pipe = dcn21_set_pipe,

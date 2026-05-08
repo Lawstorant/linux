@@ -106,7 +106,6 @@ static const struct hw_sequencer_funcs dcn30_funcs = {
 	.enable_dp_link_output = dce110_enable_dp_link_output,
 	.disable_link_output = dce110_disable_link_output,
 	.setup_hdmi_frl_link = dcn30_setup_hdmi_frl_link,
-	.set_vstartup_dsc_frl = dcn30_hw_set_vstartup_dsc_frl,
 	.set_disp_pattern_generator = dcn30_set_disp_pattern_generator,
 	.get_dcc_en_bits = dcn10_get_dcc_en_bits,
 	.update_visual_confirm_color = dcn10_update_visual_confirm_color,

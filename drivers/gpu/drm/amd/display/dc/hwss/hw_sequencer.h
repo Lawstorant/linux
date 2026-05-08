@@ -1437,9 +1437,6 @@ struct hw_sequencer_funcs {
 	unsigned int (*get_max_dispclk_mhz)(struct dc *dc,
 			struct dc_state *context);
 
-	void (*set_vstartup_dsc_frl)(struct dc *dc,
-			struct pipe_ctx *pipe_ctx);
-
 	/* Idle Optimization Related */
 	bool (*apply_idle_power_optimizations)(struct dc *dc, bool enable);
 

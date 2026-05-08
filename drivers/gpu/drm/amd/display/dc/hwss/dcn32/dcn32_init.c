@@ -98,7 +98,6 @@ static const struct hw_sequencer_funcs dcn32_funcs = {
 	.get_vupdate_offset_from_vsync = dcn10_get_vupdate_offset_from_vsync,
 	.calc_vupdate_position = dcn10_calc_vupdate_position,
 	.setup_hdmi_frl_link = dcn30_setup_hdmi_frl_link,
-	.set_vstartup_dsc_frl = dcn30_hw_set_vstartup_dsc_frl,
 	.get_max_dispclk_mhz = dcn32_get_max_dispclk_mhz,
 	.apply_idle_power_optimizations = dcn32_apply_idle_power_optimizations,
 	.does_plane_fit_in_mall = NULL,
