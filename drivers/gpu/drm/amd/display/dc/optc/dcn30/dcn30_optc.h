@@ -349,7 +349,6 @@ void optc3_triplebuffer_lock(struct timing_generator *optc);
 void optc3_program_blank_color(struct timing_generator *optc,
 		const struct tg_color *blank_color);
 
-void optc3_set_vstartup_dsc_frl(struct timing_generator *optc);
 void optc3_set_vtotal_change_limit(struct timing_generator *optc,
 		uint32_t limit);
 

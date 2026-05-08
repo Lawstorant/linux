@@ -955,15 +955,6 @@ enum dc_status dcn30_setup_hdmi_frl_link(
 	return status;
 }
 
-void dcn30_hw_set_vstartup_dsc_frl(struct dc *dc,
-		struct pipe_ctx *pipe_ctx)
-{
-	(void)dc;
-	if (pipe_ctx->stream_res.tg->funcs->set_vstartup_dsc_frl)
-		pipe_ctx->stream_res.tg->funcs->set_vstartup_dsc_frl(
-			pipe_ctx->stream_res.tg);
-}
-
 bool dcn30_apply_idle_power_optimizations(struct dc *dc, bool enable)
 {
 	union dmub_rb_cmd cmd;
