@@ -189,7 +189,13 @@ void optc3_set_dsc_config(struct timing_generator *optc,
 	struct optc *optc1 = DCN10TG_FROM_TG(optc);
 
 	optc2_set_dsc_config(optc, dsc_mode, dsc_bytes_per_pixel, dsc_slice_width);
-	REG_UPDATE(OTG_V_SYNC_A_CNTL, OTG_V_SYNC_MODE, 0);
+
+	if (dsc_mode != OPTC_DSC_DISABLED
+			&& optc1->signal == SIGNAL_TYPE_HDMI_FRL) {
+		REG_UPDATE(OTG_V_SYNC_A_CNTL, OTG_V_SYNC_MODE, 1);
+	} else {
+		REG_UPDATE(OTG_V_SYNC_A_CNTL, OTG_V_SYNC_MODE, 0);
+	}
 }
 
 void optc3_set_odm_bypass(struct timing_generator *optc,
@@ -314,6 +320,27 @@ bool optc3_get_pipe_update_pending(struct timing_generator *optc)
 	return (flip_pending == 1 || dc_update_pending == 1);
 }
 
+void optc3_set_vstartup_dsc_frl(struct timing_generator *optc)
+{
+	struct optc *optc1 = DCN10TG_FROM_TG(optc);
+	unsigned int vblank_end = 0;
+	unsigned int vstartup_start = 0;
+
+	REG_GET(OTG_V_BLANK_START_END, OTG_V_BLANK_END, &vblank_end);
+	REG_GET(OTG_VSTARTUP_PARAM, VSTARTUP_START, &vstartup_start);
+
+	/* In FRL+DSC mode the VSYNC is generated in OTG at start of HBALNK
+	 * before frame start (VCOUNT=0 and HCOUNT=0). We need to program
+	 *  VSTARTUP at least one line before frame start to ensure the VSYNC
+	 *  will be generated in VRR mode. We need to program
+	 *  VSTARTUP_START >= V_BLANK_END + 1.
+	 *  When fullscreen = false,
+	 *  global_sync will restore VSTARTUP_START to normal value
+	 */
+	if (vblank_end >= vstartup_start)
+		REG_SET(OTG_VSTARTUP_PARAM, 0, VSTARTUP_START,
+				vblank_end+1);
+}
 /**
  * optc3_set_timing_double_buffer() - DRR double buffering control
  *
@@ -409,6 +436,7 @@ static const struct timing_generator_funcs dcn30_tg_funcs = {
 		.get_optc_source = optc2_get_optc_source,
 		.set_out_mux = optc3_set_out_mux,
 		.set_drr_trigger_window = optc3_set_drr_trigger_window,
+		.set_vstartup_dsc_frl = optc3_set_vstartup_dsc_frl,
 		.set_vtotal_change_limit = optc3_set_vtotal_change_limit,
 		.set_gsl = optc2_set_gsl,
 		.set_gsl_source_select = optc2_set_gsl_source_select,
