@@ -978,10 +978,10 @@ bool dm_helpers_dp_write_dsc_enable(
 					enable_dsc = DSC_DECODING;
 				}
 				drm_dbg_dp(dev,
-					  "SST_DSC Sent DSC decoding enable to %s port, ret = %u\n",
-					  (port->passthrough_aux) ?
-					  "remote HDMI FRL RX" :
-					  "DP-HDMI PCON", ret);
+					  "SST_DSC Sent DSC %s to DP-HDMI PCON, ret = %u\n",
+					  (enable_dsc == DSC_PASSTHROUGH) ?
+					  "passthrough enable" :
+					  "decoding enable", ret);
 			} else {
 				enable_dsc = DSC_DISABLE;
 				drm_dbg_dp(dev, "SST_DSC Send DSC disable to DP-HDMI PCON\n");
