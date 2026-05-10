@@ -11218,7 +11218,7 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_state *state)
 		if (allm_changed) {
 			update_allm_state_on_crtc_stream(dm_new_crtc_state, new_con_state);
 			mod_build_hf_vsif_infopacket(dm_new_crtc_state->stream,
-				&dm_new_crtc_state->stream->hfvsif_infopacket);
+				&dm_new_crtc_state->stream->hfvsif_infopacket, false, false);
 
 			stream_update.hdmi_allm_active =
 				&dm_new_crtc_state->stream->hdmi_allm_active;
