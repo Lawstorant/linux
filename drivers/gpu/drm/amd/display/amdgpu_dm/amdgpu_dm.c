@@ -13470,7 +13470,7 @@ static void extend_range_from_vsdb(struct amdgpu_dm_connector *aconn,
 	if ((aconn->min_vfreq * 2) < aconn->max_vfreq)
 		return;
 
-	if (aconn->min_vfreq == 0)
+	if (vsdb->min_refresh_rate_hz == 0)
 		return;
 
 	if (vsdb->min_refresh_rate_hz < aconn->min_vfreq)
