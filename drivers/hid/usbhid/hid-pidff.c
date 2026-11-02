@@ -1373,9 +1373,16 @@ static int pidff_find_effects(struct pidff_device *pidff,
 
 	for (i = 0; i < ARRAY_SIZE(pidff_effect_types); i++) {
 		int pidff_type = pidff->type_id[i];
+		int usage_index;
 
-		if (pidff->set_effect_type->usage[pidff_type].hid !=
-		    pidff->create_new_effect_type->usage[pidff_type].hid) {
+		if (!pidff_type)
+			continue;
+
+		usage_index = pidff_type - 1;
+		if (usage_index >= pidff->set_effect_type->maxusage ||
+		    usage_index >= pidff->create_new_effect_type->maxusage ||
+		    pidff->set_effect_type->usage[usage_index].hid !=
+		    pidff->create_new_effect_type->usage[usage_index].hid) {
 			hid_err(pidff->hid,
 				"effect type number %d is invalid\n", i);
 			return -1;
