@@ -394,7 +394,9 @@ static void pidff_set_duration(struct pidff_usage *usage, u16 duration)
 {
 	/* PID defines INFINITE as the max possible value for duration field */
 	if (pidff_is_duration_infinite(duration)) {
-		usage->value[0] = (1U << usage->field->report_size) - 1;
+		usage->value[0] = -1;
+		if (usage->field->report_size < 32)
+			usage->value[0] = (1U << usage->field->report_size) - 1;
 		return;
 	}
 
