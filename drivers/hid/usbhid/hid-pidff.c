@@ -139,6 +139,10 @@ static const u8 pidff_effect_types[] = {
 	0x26, 0x27, 0x30, 0x31, 0x32, 0x33, 0x34,
 	0x40, 0x41, 0x42, 0x43
 };
+static const u8 pidff_effect_pid_to_ff[] = {
+	FF_CONSTANT, FF_RAMP, FF_SQUARE, FF_SINE, FF_TRIANGLE, FF_SAW_UP,
+	FF_SAW_DOWN, FF_SPRING, FF_DAMPER, FF_INERTIA, FF_FRICTION
+};
 
 #define PID_BLOCK_LOAD_SUCCESS	0
 #define PID_BLOCK_LOAD_FULL	1
@@ -251,6 +255,11 @@ static int pidff_is_effect_conditional(struct ff_effect *effect)
 	       effect->type == FF_DAMPER  ||
 	       effect->type == FF_INERTIA ||
 	       effect->type == FF_FRICTION;
+}
+
+static int pidff_is_pid_periodic(u8 index)
+{
+	return index >= PID_SQUARE && index <= PID_SAW_DOWN;
 }
 
 static int pidff_is_duration_infinite(u16 duration)
@@ -1374,6 +1383,7 @@ static int pidff_find_effects(struct pidff_device *pidff, struct input_dev *dev)
 	for (int i = 0; i < ARRAY_SIZE(pidff_effect_types); i++) {
 		/* HID uses 1-based indexing */
 		int index = pidff->type_id[i] - 1;
+		u8 ff_effect = pidff_effect_pid_to_ff[i];
 
 		if (index < 0)
 			continue;
@@ -1383,40 +1393,12 @@ static int pidff_find_effects(struct pidff_device *pidff, struct input_dev *dev)
 
 		if (ste->usage[index].hid != cte->usage[index].hid)
 			goto find_effects_err;
-	}
 
-	if (pidff->type_id[PID_CONSTANT])
-		set_bit(FF_CONSTANT, dev->ffbit);
-	if (pidff->type_id[PID_RAMP])
-		set_bit(FF_RAMP, dev->ffbit);
-	if (pidff->type_id[PID_SQUARE]) {
-		set_bit(FF_SQUARE, dev->ffbit);
-		set_bit(FF_PERIODIC, dev->ffbit);
+		hid_info(pidff->hid, "found ff effect: 0x%0x\n", ff_effect);
+		set_bit(ff_effect, dev->ffbit);
+		if (pidff_is_pid_periodic(i))
+			set_bit(FF_PERIODIC, dev->ffbit);
 	}
-	if (pidff->type_id[PID_SINE]) {
-		set_bit(FF_SINE, dev->ffbit);
-		set_bit(FF_PERIODIC, dev->ffbit);
-	}
-	if (pidff->type_id[PID_TRIANGLE]) {
-		set_bit(FF_TRIANGLE, dev->ffbit);
-		set_bit(FF_PERIODIC, dev->ffbit);
-	}
-	if (pidff->type_id[PID_SAW_UP]) {
-		set_bit(FF_SAW_UP, dev->ffbit);
-		set_bit(FF_PERIODIC, dev->ffbit);
-	}
-	if (pidff->type_id[PID_SAW_DOWN]) {
-		set_bit(FF_SAW_DOWN, dev->ffbit);
-		set_bit(FF_PERIODIC, dev->ffbit);
-	}
-	if (pidff->type_id[PID_SPRING])
-		set_bit(FF_SPRING, dev->ffbit);
-	if (pidff->type_id[PID_DAMPER])
-		set_bit(FF_DAMPER, dev->ffbit);
-	if (pidff->type_id[PID_INERTIA])
-		set_bit(FF_INERTIA, dev->ffbit);
-	if (pidff->type_id[PID_FRICTION])
-		set_bit(FF_FRICTION, dev->ffbit);
 
 	return 0;
 
