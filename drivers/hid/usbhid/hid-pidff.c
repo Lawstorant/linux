@@ -1366,27 +1366,23 @@ static int pidff_find_special_fields(struct pidff_device *pidff)
 /*
  * Find the implemented effect types
  */
-static int pidff_find_effects(struct pidff_device *pidff,
-			      struct input_dev *dev)
+static int pidff_find_effects(struct pidff_device *pidff, struct input_dev *dev)
 {
-	int i;
+	struct hid_field *ste = pidff->set_effect_type;
+	struct hid_field *cte = pidff->create_new_effect_type;
 
-	for (i = 0; i < ARRAY_SIZE(pidff_effect_types); i++) {
-		int pidff_type = pidff->type_id[i];
-		int usage_index;
+	for (int i = 0; i < ARRAY_SIZE(pidff_effect_types); i++) {
+		/* HID uses 1-based indexing */
+		int index = pidff->type_id[i] - 1;
 
-		if (!pidff_type)
+		if (index < 0)
 			continue;
 
-		usage_index = pidff_type - 1;
-		if (usage_index >= pidff->set_effect_type->maxusage ||
-		    usage_index >= pidff->create_new_effect_type->maxusage ||
-		    pidff->set_effect_type->usage[usage_index].hid !=
-		    pidff->create_new_effect_type->usage[usage_index].hid) {
-			hid_err(pidff->hid,
-				"effect type number %d is invalid\n", i);
-			return -1;
-		}
+		if (index >= ste->maxusage || index >= cte->maxusage)
+			goto find_effects_err;
+
+		if (ste->usage[index].hid != cte->usage[index].hid)
+			goto find_effects_err;
 	}
 
 	if (pidff->type_id[PID_CONSTANT])
@@ -1423,6 +1419,10 @@ static int pidff_find_effects(struct pidff_device *pidff,
 		set_bit(FF_FRICTION, dev->ffbit);
 
 	return 0;
+
+find_effects_err:
+	hid_err(pidff->hid, "malformed effect types in device descriptor\n");
+	return -1;
 }
 
 #define PIDFF_FIND_FIELDS(name, report, strict) \
