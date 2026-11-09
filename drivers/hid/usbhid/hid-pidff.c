@@ -1191,14 +1191,16 @@ static void pidff_find_reports(struct hid_device *hid, int report_type,
  */
 static bool pidff_reports_ok(struct pidff_device *pidff)
 {
+	bool ret = true;
+
 	for (int i = 0; i < PID_REQUIRED_REPORTS; i++) {
 		if (!pidff->reports[i]) {
-			hid_dbg(pidff->hid, "%d missing\n", i);
-			return false;
+			hid_err(pidff->hid, "report 0x%02x missing\n", i);
+			ret = false;
 		}
 	}
 
-	return true;
+	return ret;
 }
 
 /*
@@ -1570,7 +1572,7 @@ int hid_pidff_init_with_quirks(struct hid_device *hid, u32 initial_quirks)
 	pidff_find_reports(hid, HID_FEATURE_REPORT, pidff);
 
 	if (!pidff_reports_ok(pidff)) {
-		hid_dbg(hid, "reports not ok, aborting\n");
+		hid_err(hid, "reports not ok, aborting\n");
 		error = -ENODEV;
 		goto fail;
 	}
