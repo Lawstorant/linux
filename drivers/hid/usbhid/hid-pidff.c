@@ -249,7 +249,7 @@ struct pidff_device {
 	u8 axis_count;
 };
 
-static int pidff_is_effect_conditional(struct ff_effect *effect)
+static bool pidff_is_effect_conditional(struct ff_effect *effect)
 {
 	return effect->type == FF_SPRING  ||
 	       effect->type == FF_DAMPER  ||
@@ -257,12 +257,12 @@ static int pidff_is_effect_conditional(struct ff_effect *effect)
 	       effect->type == FF_FRICTION;
 }
 
-static int pidff_is_pid_periodic(u8 index)
+static bool pidff_is_pid_periodic(u8 index)
 {
 	return index >= PID_SQUARE && index <= PID_SAW_DOWN;
 }
 
-static int pidff_is_duration_infinite(u16 duration)
+static bool pidff_is_duration_infinite(u16 duration)
 {
 	return duration == FF_INFINITE || duration == PID_INFINITE;
 }
@@ -479,10 +479,10 @@ static void pidff_set_envelope_report(struct pidff_device *pidff,
 /*
  * Test if the new envelope differs from old one
  */
-static int pidff_needs_set_envelope(struct ff_envelope *envelope,
-				    struct ff_envelope *old)
+static bool pidff_needs_set_envelope(struct ff_envelope *envelope,
+				     struct ff_envelope *old)
 {
-	int needs_new_envelope;
+	bool needs_new_envelope;
 
 	needs_new_envelope = envelope->attack_level  != 0 ||
 			     envelope->fade_level    != 0 ||
@@ -490,7 +490,7 @@ static int pidff_needs_set_envelope(struct ff_envelope *envelope,
 			     envelope->fade_length   != 0;
 
 	if (!needs_new_envelope)
-		return 0;
+		return false;
 	if (!old)
 		return needs_new_envelope;
 
@@ -518,8 +518,8 @@ static void pidff_set_constant_report(struct pidff_device *pidff,
 /*
  * Test if the constant parameters have changed between effects
  */
-static int pidff_needs_set_constant(struct ff_effect *effect,
-				    struct ff_effect *old)
+static bool pidff_needs_set_constant(struct ff_effect *effect,
+				     struct ff_effect *old)
 {
 	return effect->u.constant.level != old->u.constant.level;
 }
@@ -568,8 +568,8 @@ static void pidff_set_effect_report(struct pidff_device *pidff,
 /*
  * Test if the values used in set_effect have changed
  */
-static int pidff_needs_set_effect(struct ff_effect *effect,
-				  struct ff_effect *old)
+static bool pidff_needs_set_effect(struct ff_effect *effect,
+				   struct ff_effect *old)
 {
 	return effect->replay.length != old->replay.length ||
 	       effect->trigger.interval != old->trigger.interval ||
@@ -601,8 +601,8 @@ static void pidff_set_periodic_report(struct pidff_device *pidff,
 /*
  * Test if periodic effect parameters have changed
  */
-static int pidff_needs_set_periodic(struct ff_effect *effect,
-				    struct ff_effect *old)
+static bool pidff_needs_set_periodic(struct ff_effect *effect,
+				     struct ff_effect *old)
 {
 	return effect->u.periodic.magnitude != old->u.periodic.magnitude ||
 	       effect->u.periodic.offset != old->u.periodic.offset ||
@@ -659,13 +659,12 @@ static void pidff_set_condition_report(struct pidff_device *pidff,
 /*
  * Test if condition effect parameters have changed
  */
-static int pidff_needs_set_condition(struct ff_effect *effect,
-				     struct ff_effect *old)
+static bool pidff_needs_set_condition(struct ff_effect *effect,
+				      struct ff_effect *old)
 {
-	int i;
-	int ret = 0;
+	bool ret = false;
 
-	for (i = 0; i < 2; i++) {
+	for (int i = 0; i < 2; i++) {
 		struct ff_condition_effect *cond = &effect->u.condition[i];
 		struct ff_condition_effect *old_cond = &old->u.condition[i];
 
@@ -699,7 +698,7 @@ static void pidff_set_ramp_report(struct pidff_device *pidff,
 /*
  * Test if ramp force parameters have changed
  */
-static int pidff_needs_set_ramp(struct ff_effect *effect, struct ff_effect *old)
+static bool pidff_needs_set_ramp(struct ff_effect *effect, struct ff_effect *old)
 {
 	return effect->u.ramp.start_level != old->u.ramp.start_level ||
 	       effect->u.ramp.end_level != old->u.ramp.end_level;
@@ -839,7 +838,7 @@ static int pidff_request_effect_upload(struct pidff_device *pidff, int efnum)
 	return -EIO;
 }
 
-static int pidff_needs_playback(struct pidff_device *pidff, int effect_id, int n)
+static bool pidff_needs_playback(struct pidff_device *pidff, int effect_id, int n)
 {
 	return !pidff->effect[effect_id].is_infinite ||
 		pidff->effect[effect_id].loop_count != n;
@@ -1087,7 +1086,7 @@ static int pidff_find_field_with_usage(int *usage_index,
  * Find fields from a report and fill a pidff_usage
  */
 static int pidff_find_fields(struct pidff_usage *usage, const u8 *table,
-			     struct hid_report *report, int count, int strict,
+			     struct hid_report *report, int count, bool strict,
 			     u32 *quirks)
 {
 	if (!report) {
@@ -1191,23 +1190,23 @@ static void pidff_find_reports(struct hid_device *hid, int report_type,
 /*
  * Test if the required reports have been found
  */
-static int pidff_reports_ok(struct pidff_device *pidff)
+static bool pidff_reports_ok(struct pidff_device *pidff)
 {
 	for (int i = 0; i < PID_REQUIRED_REPORTS; i++) {
 		if (!pidff->reports[i]) {
 			hid_dbg(pidff->hid, "%d missing\n", i);
-			return 0;
+			return false;
 		}
 	}
 
-	return 1;
+	return true;
 }
 
 /*
  * Find a field with a specific usage within a report
  */
 static struct hid_field *pidff_find_special_field(struct hid_report *report,
-						  int usage, int enforce_min)
+						  uint usage, bool enforce_min)
 {
 	if (!report) {
 		pr_debug("%s, null report\n", __func__);
@@ -1265,25 +1264,25 @@ static int pidff_find_special_fields(struct pidff_device *pidff)
 
 	pidff->create_new_effect_type =
 		pidff_find_special_field(pidff->reports[PID_CREATE_NEW_EFFECT],
-					 PID_EFFECT_TYPE, 1);
+					 PID_EFFECT_TYPE, true);
 	pidff->set_effect_type =
 		pidff_find_special_field(pidff->reports[PID_SET_EFFECT],
-					 PID_EFFECT_TYPE, 1);
+					 PID_EFFECT_TYPE, true);
 	pidff->axes_enable =
 		pidff_find_special_field(pidff->reports[PID_SET_EFFECT],
-					 PID_AXES_ENABLE, 0);
+					 PID_AXES_ENABLE, false);
 	pidff->effect_direction =
 		pidff_find_special_field(pidff->reports[PID_SET_EFFECT],
-					 PID_DIRECTION, 0);
+					 PID_DIRECTION, false);
 	pidff->device_control =
 		pidff_find_special_field(pidff->reports[PID_DEVICE_CONTROL],
-					 PID_DEVICE_CONTROL_ARRAY, 0);
+					 PID_DEVICE_CONTROL_ARRAY, false);
 	pidff->block_load_status =
 		pidff_find_special_field(pidff->reports[PID_BLOCK_LOAD],
-					 PID_BLOCK_LOAD_STATUS, 1);
+					 PID_BLOCK_LOAD_STATUS, true);
 	pidff->effect_operation_status =
 		pidff_find_special_field(pidff->reports[PID_EFFECT_OPERATION],
-					 PID_EFFECT_OPERATION_ARRAY, 1);
+					 PID_EFFECT_OPERATION_ARRAY, true);
 
 	hid_dbg(pidff->hid, "search done\n");
 
@@ -1409,7 +1408,7 @@ find_effects_err:
  */
 static int pidff_init_fields(struct pidff_device *pidff, struct input_dev *dev)
 {
-	if (PIDFF_FIND_FIELDS(set_effect, PID_SET_EFFECT, 1)) {
+	if (PIDFF_FIND_FIELDS(set_effect, PID_SET_EFFECT, true)) {
 		hid_err(pidff->hid, "unknown set_effect report layout\n");
 		return -ENODEV;
 	}
@@ -1421,18 +1420,18 @@ static int pidff_init_fields(struct pidff_device *pidff, struct input_dev *dev)
 			 "duration field has unusual time unit exponent %d\n",
 			 exp);
 
-	PIDFF_FIND_FIELDS(block_load, PID_BLOCK_LOAD, 0);
+	PIDFF_FIND_FIELDS(block_load, PID_BLOCK_LOAD, false);
 	if (!pidff->block_load[PID_EFFECT_BLOCK_INDEX].value) {
 		hid_err(pidff->hid, "unknown pid_block_load report layout\n");
 		return -ENODEV;
 	}
 
-	if (PIDFF_FIND_FIELDS(effect_operation, PID_EFFECT_OPERATION, 1)) {
+	if (PIDFF_FIND_FIELDS(effect_operation, PID_EFFECT_OPERATION, true)) {
 		hid_err(pidff->hid, "unknown effect_operation report layout\n");
 		return -ENODEV;
 	}
 
-	if (PIDFF_FIND_FIELDS(block_free, PID_BLOCK_FREE, 1)) {
+	if (PIDFF_FIND_FIELDS(block_free, PID_BLOCK_FREE, true)) {
 		hid_err(pidff->hid, "unknown pid_block_free report layout\n");
 		return -ENODEV;
 	}
@@ -1440,7 +1439,7 @@ static int pidff_init_fields(struct pidff_device *pidff, struct input_dev *dev)
 	if (pidff_find_special_fields(pidff) || pidff_find_effects(pidff, dev))
 		return -ENODEV;
 
-	if (PIDFF_FIND_FIELDS(set_envelope, PID_SET_ENVELOPE, 1)) {
+	if (PIDFF_FIND_FIELDS(set_envelope, PID_SET_ENVELOPE, true)) {
 		if (test_and_clear_bit(FF_CONSTANT, dev->ffbit))
 			hid_warn(pidff->hid,
 				 "has constant effect but no envelope\n");
@@ -1453,15 +1452,15 @@ static int pidff_init_fields(struct pidff_device *pidff, struct input_dev *dev)
 				 "has periodic effect but no envelope\n");
 	}
 
-	if (PIDFF_FIND_FIELDS(set_constant, PID_SET_CONSTANT, 1) &&
+	if (PIDFF_FIND_FIELDS(set_constant, PID_SET_CONSTANT, true) &&
 	    test_and_clear_bit(FF_CONSTANT, dev->ffbit))
 		hid_warn(pidff->hid, "unknown constant effect layout\n");
 
-	if (PIDFF_FIND_FIELDS(set_ramp, PID_SET_RAMP, 1) &&
+	if (PIDFF_FIND_FIELDS(set_ramp, PID_SET_RAMP, true) &&
 	    test_and_clear_bit(FF_RAMP, dev->ffbit))
 		hid_warn(pidff->hid, "unknown ramp effect layout\n");
 
-	if (PIDFF_FIND_FIELDS(set_condition, PID_SET_CONDITION, 1)) {
+	if (PIDFF_FIND_FIELDS(set_condition, PID_SET_CONDITION, true)) {
 		bool test = false;
 
 		test |= test_and_clear_bit(FF_SPRING, dev->ffbit);
@@ -1472,13 +1471,13 @@ static int pidff_init_fields(struct pidff_device *pidff, struct input_dev *dev)
 			hid_warn(pidff->hid, "unknown condition effect layout\n");
 	}
 
-	if (PIDFF_FIND_FIELDS(set_periodic, PID_SET_PERIODIC, 1) &&
+	if (PIDFF_FIND_FIELDS(set_periodic, PID_SET_PERIODIC, true) &&
 	    test_and_clear_bit(FF_PERIODIC, dev->ffbit))
 		hid_warn(pidff->hid, "unknown periodic effect layout\n");
 
 	PIDFF_FIND_FIELDS(pool, PID_POOL, 0);
 
-	if (!PIDFF_FIND_FIELDS(device_gain, PID_DEVICE_GAIN, 1))
+	if (!PIDFF_FIND_FIELDS(device_gain, PID_DEVICE_GAIN, true))
 		set_bit(FF_GAIN, dev->ffbit);
 
 	return 0;
