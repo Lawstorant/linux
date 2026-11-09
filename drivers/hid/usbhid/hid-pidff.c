@@ -249,7 +249,7 @@ struct pidff_device {
 	u8 axis_count;
 };
 
-static int pidff_is_effect_conditional(struct ff_effect *effect)
+static bool pidff_is_effect_conditional(struct ff_effect *effect)
 {
 	return effect->type == FF_SPRING  ||
 	       effect->type == FF_DAMPER  ||
@@ -257,12 +257,12 @@ static int pidff_is_effect_conditional(struct ff_effect *effect)
 	       effect->type == FF_FRICTION;
 }
 
-static int pidff_is_pid_periodic(u8 index)
+static bool pidff_is_pid_periodic(u8 index)
 {
 	return index >= PID_SQUARE && index <= PID_SAW_DOWN;
 }
 
-static int pidff_is_duration_infinite(u16 duration)
+static bool pidff_is_duration_infinite(u16 duration)
 {
 	return duration == FF_INFINITE || duration == PID_INFINITE;
 }
@@ -477,8 +477,8 @@ static void pidff_set_envelope_report(struct pidff_device *pidff,
 /*
  * Test if the new envelope differs from old one
  */
-static int pidff_needs_set_envelope(struct ff_envelope *envelope,
-				    struct ff_envelope *old)
+static bool pidff_needs_set_envelope(struct ff_envelope *envelope,
+				     struct ff_envelope *old)
 {
 	int needs_new_envelope;
 
@@ -488,7 +488,7 @@ static int pidff_needs_set_envelope(struct ff_envelope *envelope,
 			     envelope->fade_length   != 0;
 
 	if (!needs_new_envelope)
-		return 0;
+		return false;
 	if (!old)
 		return needs_new_envelope;
 
@@ -516,8 +516,8 @@ static void pidff_set_constant_report(struct pidff_device *pidff,
 /*
  * Test if the constant parameters have changed between effects
  */
-static int pidff_needs_set_constant(struct ff_effect *effect,
-				    struct ff_effect *old)
+static bool pidff_needs_set_constant(struct ff_effect *effect,
+				     struct ff_effect *old)
 {
 	return effect->u.constant.level != old->u.constant.level;
 }
@@ -566,8 +566,8 @@ static void pidff_set_effect_report(struct pidff_device *pidff,
 /*
  * Test if the values used in set_effect have changed
  */
-static int pidff_needs_set_effect(struct ff_effect *effect,
-				  struct ff_effect *old)
+static bool pidff_needs_set_effect(struct ff_effect *effect,
+				   struct ff_effect *old)
 {
 	return effect->replay.length != old->replay.length ||
 	       effect->trigger.interval != old->trigger.interval ||
@@ -599,8 +599,8 @@ static void pidff_set_periodic_report(struct pidff_device *pidff,
 /*
  * Test if periodic effect parameters have changed
  */
-static int pidff_needs_set_periodic(struct ff_effect *effect,
-				    struct ff_effect *old)
+static bool pidff_needs_set_periodic(struct ff_effect *effect,
+				     struct ff_effect *old)
 {
 	return effect->u.periodic.magnitude != old->u.periodic.magnitude ||
 	       effect->u.periodic.offset != old->u.periodic.offset ||
@@ -657,8 +657,8 @@ static void pidff_set_condition_report(struct pidff_device *pidff,
 /*
  * Test if condition effect parameters have changed
  */
-static int pidff_needs_set_condition(struct ff_effect *effect,
-				     struct ff_effect *old)
+static bool pidff_needs_set_condition(struct ff_effect *effect,
+				      struct ff_effect *old)
 {
 	int i;
 	int ret = 0;
@@ -697,7 +697,7 @@ static void pidff_set_ramp_report(struct pidff_device *pidff,
 /*
  * Test if ramp force parameters have changed
  */
-static int pidff_needs_set_ramp(struct ff_effect *effect, struct ff_effect *old)
+static bool pidff_needs_set_ramp(struct ff_effect *effect, struct ff_effect *old)
 {
 	return effect->u.ramp.start_level != old->u.ramp.start_level ||
 	       effect->u.ramp.end_level != old->u.ramp.end_level;
@@ -837,7 +837,7 @@ static int pidff_request_effect_upload(struct pidff_device *pidff, int efnum)
 	return -EIO;
 }
 
-static int pidff_needs_playback(struct pidff_device *pidff, int effect_id, int n)
+static bool pidff_needs_playback(struct pidff_device *pidff, int effect_id, int n)
 {
 	return !pidff->effect[effect_id].is_infinite ||
 		pidff->effect[effect_id].loop_count != n;
@@ -1189,23 +1189,23 @@ static void pidff_find_reports(struct hid_device *hid, int report_type,
 /*
  * Test if the required reports have been found
  */
-static int pidff_reports_ok(struct pidff_device *pidff)
+static bool pidff_reports_ok(struct pidff_device *pidff)
 {
 	for (int i = 0; i < PID_REQUIRED_REPORTS; i++) {
 		if (!pidff->reports[i]) {
 			hid_dbg(pidff->hid, "%d missing\n", i);
-			return 0;
+			return false;
 		}
 	}
 
-	return 1;
+	return true;
 }
 
 /*
  * Find a field with a specific usage within a report
  */
 static struct hid_field *pidff_find_special_field(struct hid_report *report,
-						  int usage, int enforce_min)
+						  uint usage, bool enforce_min)
 {
 	if (!report) {
 		pr_debug("%s, null report\n", __func__);
@@ -1263,19 +1263,19 @@ static int pidff_find_special_fields(struct pidff_device *pidff)
 
 	pidff->create_new_effect_type =
 		pidff_find_special_field(pidff->reports[PID_CREATE_NEW_EFFECT],
-					 PID_EFFECT_TYPE, 1);
+					 PID_EFFECT_TYPE, true);
 	pidff->set_effect_type =
 		pidff_find_special_field(pidff->reports[PID_SET_EFFECT],
-					 PID_EFFECT_TYPE, 1);
+					 PID_EFFECT_TYPE, true);
 	pidff->axes_enable =
 		pidff_find_special_field(pidff->reports[PID_SET_EFFECT],
-					 PID_AXES_ENABLE, 0);
+					 PID_AXES_ENABLE, false);
 	pidff->effect_direction =
 		pidff_find_special_field(pidff->reports[PID_SET_EFFECT],
-					 PID_DIRECTION, 0);
+					 PID_DIRECTION, false);
 	pidff->device_control =
 		pidff_find_special_field(pidff->reports[PID_DEVICE_CONTROL],
-			PID_DEVICE_CONTROL_ARRAY, 1);
+					 PID_DEVICE_CONTROL_ARRAY, true);
 
 	/* Detect and set permissive control quirk */
 	if (!pidff->device_control) {
@@ -1283,15 +1283,15 @@ static int pidff_find_special_fields(struct pidff_device *pidff)
 		pidff->quirks |= HID_PIDFF_QUIRK_PERMISSIVE_CONTROL;
 		pidff->device_control = pidff_find_special_field(
 			pidff->reports[PID_DEVICE_CONTROL],
-			PID_DEVICE_CONTROL_ARRAY, 0);
+			PID_DEVICE_CONTROL_ARRAY, false);
 	}
 
 	pidff->block_load_status =
 		pidff_find_special_field(pidff->reports[PID_BLOCK_LOAD],
-					 PID_BLOCK_LOAD_STATUS, 1);
+					 PID_BLOCK_LOAD_STATUS, true);
 	pidff->effect_operation_status =
 		pidff_find_special_field(pidff->reports[PID_EFFECT_OPERATION],
-					 PID_EFFECT_OPERATION_ARRAY, 1);
+					 PID_EFFECT_OPERATION_ARRAY, true);
 
 	hid_dbg(pidff->hid, "search done\n");
 
