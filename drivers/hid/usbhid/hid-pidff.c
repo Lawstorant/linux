@@ -1215,16 +1215,23 @@ static struct hid_field *pidff_find_special_field(struct hid_report *report,
 		return NULL;
 	}
 
-	for (int i = 0; i < report->maxfield; i++) {
-		if (report->field[i]->logical == (HID_UP_PID | usage) &&
-		    report->field[i]->report_count > 0) {
-			if (!enforce_min ||
-			    report->field[i]->logical_minimum == 1)
-				return report->field[i];
+	uint sought = HID_UP_PID | usage;
 
+	for (int i = 0; i < report->maxfield; i++) {
+		struct hid_field *field = report->field[i];
+
+		if (field->logical != sought)
+			continue;
+
+		if (field->report_count < 1)
+			continue;
+
+		if (enforce_min && field->logical_minimum != 1) {
 			pr_err("logical_minimum is not 1 as it should be\n");
 			return NULL;
 		}
+
+		return field;
 	}
 	return NULL;
 }
@@ -1234,7 +1241,7 @@ static struct hid_field *pidff_find_special_field(struct hid_report *report,
  */
 static int pidff_find_special_keys(int *keys, struct hid_field *fld,
 				   const u8 *usagetable, int count,
-				   unsigned int usage_page)
+				   uint usage_page)
 {
 	int found = 0;
 
@@ -1243,7 +1250,7 @@ static int pidff_find_special_keys(int *keys, struct hid_field *fld,
 
 	for (int i = 0; i < count; i++) {
 		keys[i] = pidff_find_usage(fld, usage_page | usagetable[i]) + 1;
-		if (keys[i])
+		if (keys[i] > 0)
 			found++;
 	}
 	return found;
