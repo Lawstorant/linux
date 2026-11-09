@@ -372,6 +372,15 @@ static u32 pidff_rescale_time(u16 time, struct hid_field *field)
 	return scaled_time;
 }
 
+#define PIDFF_SET_IF_EXISTS(quirk, helper, field, pid, value) \
+	({ if (!(pidff->quirks & HID_PIDFF_QUIRK_MISSING_##quirk)) \
+		pidff_##helper(&pidff->set_##field[pid], value); })
+
+static void pidff_set_direct(struct pidff_usage *usage, s32 value)
+{
+	usage->value[0] = value;
+}
+
 static void pidff_set(struct pidff_usage *usage, u16 value)
 {
 	usage->value[0] = pidff_rescale(value, U16_MAX, usage->field);
@@ -553,11 +562,8 @@ static void pidff_set_effect_report(struct pidff_device *pidff,
 		pidff->set_effect[PID_GAIN].field->logical_maximum;
 
 	pidff_set_effect_direction(pidff, effect);
-
-	/* Omit setting delay field if it's missing */
-	if (!(pidff->quirks & HID_PIDFF_QUIRK_MISSING_DELAY))
-		pidff_set_time(&pidff->set_effect[PID_START_DELAY],
-			       effect->replay.delay);
+	PIDFF_SET_IF_EXISTS(DELAY, set_time, effect, PID_START_DELAY,
+			    effect->replay.delay);
 
 	hid_hw_request(pidff->hid, pidff->reports[PID_SET_EFFECT],
 		       HID_REQ_SET_REPORT);
@@ -614,40 +620,29 @@ static bool pidff_needs_set_periodic(struct ff_effect *effect,
 static void pidff_set_condition_report(struct pidff_device *pidff,
 				       struct ff_effect *effect)
 {
-	int i, max_axis;
-
 	/* Devices missing Parameter Block Offset can only have one axis */
-	max_axis = pidff->quirks & HID_PIDFF_QUIRK_MISSING_PBO ? 1 : 2;
+	int max_axis = pidff->quirks & HID_PIDFF_QUIRK_MISSING_PBO ? 1 : 2;
+	struct pidff_usage *sc = pidff->set_condition;
 
-	pidff->set_condition[PID_EFFECT_BLOCK_INDEX].value[0] =
+	sc[PID_EFFECT_BLOCK_INDEX].value[0] =
 		pidff->block_load[PID_EFFECT_BLOCK_INDEX].value[0];
 
-	for (i = 0; i < max_axis; i++) {
-		/* Omit Parameter Block Offset if missing */
-		if (!(pidff->quirks & HID_PIDFF_QUIRK_MISSING_PBO))
-			pidff->set_condition[PID_PARAM_BLOCK_OFFSET].value[0] = i;
+	for (int i = 0; i < max_axis; i++) {
+		struct ff_condition_effect *c = &effect->u.condition[i];
 
-		pidff_set_signed(&pidff->set_condition[PID_CP_OFFSET],
-				 effect->u.condition[i].center);
-		pidff_set_signed(&pidff->set_condition[PID_POS_COEFFICIENT],
-				 effect->u.condition[i].right_coeff);
-		pidff_set(&pidff->set_condition[PID_POS_SATURATION],
-			  effect->u.condition[i].right_saturation);
+		PIDFF_SET_IF_EXISTS(PBO, set_direct, condition,
+				    PID_PARAM_BLOCK_OFFSET, i);
 
-		/* Omit Negative Coefficient if missing */
-		if (!(pidff->quirks & HID_PIDFF_QUIRK_MISSING_NEG_COEFFICIENT))
-			pidff_set_signed(&pidff->set_condition[PID_NEG_COEFFICIENT],
-					effect->u.condition[i].left_coeff);
+		pidff_set_signed(&sc[PID_CP_OFFSET], c->center);
+		pidff_set_signed(&sc[PID_POS_COEFFICIENT], c->right_coeff);
+		pidff_set(&sc[PID_POS_SATURATION], c->right_saturation);
 
-		/* Omit Negative Saturation if missing */
-		if (!(pidff->quirks & HID_PIDFF_QUIRK_MISSING_NEG_SATURATION))
-			pidff_set_signed(&pidff->set_condition[PID_NEG_SATURATION],
-					effect->u.condition[i].left_saturation);
-
-		/* Omit Deadband field if missing */
-		if (!(pidff->quirks & HID_PIDFF_QUIRK_MISSING_DEADBAND))
-			pidff_set(&pidff->set_condition[PID_DEADBAND],
-				effect->u.condition[i].deadband);
+		PIDFF_SET_IF_EXISTS(NEG_COEFFICIENT, set_signed, condition,
+				    PID_NEG_COEFFICIENT, c->left_coeff);
+		PIDFF_SET_IF_EXISTS(NEG_SATURATION, set_signed, condition,
+				    PID_NEG_SATURATION, c->left_saturation);
+		PIDFF_SET_IF_EXISTS(DEADBAND, set, condition,
+				    PID_DEADBAND, c->deadband);
 
 		hid_hw_request(pidff->hid, pidff->reports[PID_SET_CONDITION],
 			       HID_REQ_SET_REPORT);
@@ -1022,10 +1017,7 @@ static void pidff_autocenter(struct pidff_device *pidff, u16 magnitude)
 	pidff->set_effect[PID_TRIGGER_REPEAT_INT].value[0] = 0;
 	pidff_set(&pidff->set_effect[PID_GAIN], magnitude);
 	pidff->set_effect[PID_DIRECTION_ENABLE].value[0] = 1;
-
-	/* Omit setting delay field if it's missing */
-	if (!(pidff->quirks & HID_PIDFF_QUIRK_MISSING_DELAY))
-		pidff->set_effect[PID_START_DELAY].value[0] = 0;
+	PIDFF_SET_IF_EXISTS(DELAY, set_direct, effect, PID_START_DELAY, 0);
 
 	hid_hw_request(pidff->hid, pidff->reports[PID_SET_EFFECT],
 		       HID_REQ_SET_REPORT);
