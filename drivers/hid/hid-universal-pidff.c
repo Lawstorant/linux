@@ -47,7 +47,7 @@ static int universal_pidff_input_mapping(struct hid_device *hdev,
 		code = KEY_RESERVED;
 
 	hid_map_usage(hi, usage, bit, max, EV_KEY, code);
-	hid_dbg(hdev, "Button %d: usage %d", button, code);
+	hid_dbg(hdev, "Button %d: usage %d\n", button + 1, code);
 	return 1;
 }
 
@@ -107,7 +107,7 @@ static int universal_pidff_probe(struct hid_device *hdev,
 		goto err_stop;
 	}
 
-	hid_info(hdev, "Universal pidff driver loaded successfully!");
+	hid_info(hdev, "Universal pidff driver loaded successfully!\n");
 
 	return 0;
 err_stop:
