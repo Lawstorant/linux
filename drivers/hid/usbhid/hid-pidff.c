@@ -249,6 +249,31 @@ struct pidff_device {
 	u8 axis_count;
 };
 
+/* HID helpers */
+static void pidff_set_hid(struct hid_field *field, s32 value)
+{
+	field->value[0] = value;
+}
+
+static void pidff_hw_request(struct pidff_device *pidff, u8 report, bool wait,
+			     enum hid_class_request request)
+{
+	hid_hw_request(pidff->hid, pidff->reports[report], request);
+	if (wait)
+		hid_hw_wait(pidff->hid);
+}
+
+static void pidff_hw_set(struct pidff_device *pidff, u8 report, bool wait)
+{
+	pidff_hw_request(pidff, report, wait, HID_REQ_SET_REPORT);
+}
+
+static void pidff_hw_get(struct pidff_device *pidff, u8 report, bool wait)
+{
+	pidff_hw_request(pidff, report, wait, HID_REQ_GET_REPORT);
+}
+
+/* PID helpers */
 static bool pidff_is_effect_conditional(struct ff_effect *effect)
 {
 	return effect->type == FF_SPRING  ||
