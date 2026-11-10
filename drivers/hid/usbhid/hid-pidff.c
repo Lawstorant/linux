@@ -164,6 +164,7 @@ static const u8 pidff_effect_operation_status[] = { 0x79, 0x7b };
 
 #define PIDFF_FIXED_WHEEL_DIRECTION	PID_DIRECTION_EAST
 #define PIDFF_FETCH_POOL_RETRIES	20
+#define PIDFF_BLOCK_LOAD_RETRIES	60
 
 /* AXES_ENABLE and DIRECTION axes */
 enum pid_axes {
@@ -867,8 +868,8 @@ static void pidff_fetch_pool(struct pidff_device *pidff)
  * Reset and enable actuators if no effects were present on the device
  *
  * Returns 0 if device reported success, -ENOSPC if the device reported memory
- * is full. Upon unknown response the function will retry for 60 times, if
- * still unsuccessful -EIO is returned.
+ * is full. Upon unknown response the function will retry for
+ * PIDFF_BLOCK_LOAD_RETRIES times. If still unsuccessful -EIO is returned.
  */
 static int pidff_request_effect_upload(struct pidff_device *pidff, int efnum)
 {
@@ -883,7 +884,7 @@ static int pidff_request_effect_upload(struct pidff_device *pidff, int efnum)
 	pidff_set_hid(pidff->block_load_status, 0);
 	hid_hw_wait(pidff->hid);
 
-	for (int i = 0; i < 60; i++) {
+	for (int i = 0; i < PIDFF_BLOCK_LOAD_RETRIES; i++) {
 		hid_dbg(pidff->hid, "pid_block_load requested\n");
 		pidff_hw_get(pidff, PID_BLOCK_LOAD, true);
 		status = pidff_get_hid(pidff->block_load_status);
@@ -903,7 +904,8 @@ static int pidff_request_effect_upload(struct pidff_device *pidff, int efnum)
 			return -EREMOTEIO;
 		}
 	}
-	hid_err(pidff->hid, "pid_block_load failed 60 times\n");
+
+	hid_err(pidff->hid, "pid_block_load failed %u times\n", PIDFF_BLOCK_LOAD_RETRIES);
 	return -EIO;
 }
 
