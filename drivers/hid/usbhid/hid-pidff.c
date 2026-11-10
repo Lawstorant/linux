@@ -472,7 +472,7 @@ static void pidff_set_signed(struct pidff_usage *usage, s16 value)
 	}
 
 	pidff_set(usage, result);
-	pr_debug("calculated from %d to %d\n", value, usage->value[0]);
+	pr_debug("calculated from %d to %d\n", value, result);
 }
 
 static void pidff_set_time(struct pidff_usage *usage, u16 time)
