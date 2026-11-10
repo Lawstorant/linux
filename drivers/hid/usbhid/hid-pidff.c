@@ -19,10 +19,14 @@
 
 #define	PID_EFFECTS_MAX		64
 #define	PID_INFINITE		U16_MAX
+#define PID_ATTACK_MAX		S16_MAX
+#define PID_FADE_MAX		PID_ATTACK_MAX
 
 /* Linux Force Feedback API uses miliseconds as time unit */
 #define FF_TIME_EXPONENT	-3
 #define FF_INFINITE		0
+#define FF_ATTACK_MAX		S16_MAX
+#define FF_FADE_MAX		FF_ATTACK_MAX
 
 /* Report usage table used to put reports into an array */
 #define PID_SET_EFFECT		0
@@ -443,10 +447,15 @@ static void pidff_set_max(struct pidff_usage *usage)
 	pidff_set(usage, usage->field->logical_maximum);
 }
 
+static void pidff_set_scaled2(struct pidff_usage *usage, u16 value, u16 max)
+{
+	pidff_set(usage, pidff_rescale(value, max, usage->field));
+	pr_debug("calculated from %d to %d\n", value, usage->value[0]);
+}
+
 static void pidff_set_scaled(struct pidff_usage *usage, u16 value)
 {
-	pidff_set(usage, pidff_rescale(value, U16_MAX, usage->field));
-	pr_debug("calculated from %d to %d\n", value, usage->value[0]);
+	pidff_set_scaled2(usage, value, U16_MAX);
 }
 
 static void pidff_set_signed(struct pidff_usage *usage, s16 value)
@@ -552,25 +561,18 @@ static void pidff_set_effect_direction(struct pidff_device *pidff,
 static void pidff_set_envelope_report(struct pidff_device *pidff,
 				      struct ff_envelope *envelope)
 {
-	pidff->set_envelope[PID_EFFECT_BLOCK_INDEX].value[0] =
-		pidff->block_load[PID_EFFECT_BLOCK_INDEX].value[0];
+	struct pidff_usage *se = pidff->set_envelope;
+	u16 attack_level = MAX(envelope->attack_level, FF_ATTACK_MAX);
+	u16 fade_level = MAX(envelope->fade_level, FF_FADE_MAX);
 
-	pidff->set_envelope[PID_ATTACK_LEVEL].value[0] =
-		pidff_rescale(envelope->attack_level >
-			S16_MAX ? S16_MAX : envelope->attack_level, S16_MAX,
-			pidff->set_envelope[PID_ATTACK_LEVEL].field);
-	pidff->set_envelope[PID_FADE_LEVEL].value[0] =
-		pidff_rescale(envelope->fade_level >
-			S16_MAX ? S16_MAX : envelope->fade_level, S16_MAX,
-			pidff->set_envelope[PID_FADE_LEVEL].field);
+	pidff_copy_effect_block_index(pidff, se);
 
-	pidff_set_time(&pidff->set_envelope[PID_ATTACK_TIME],
-		       envelope->attack_length);
-	pidff_set_time(&pidff->set_envelope[PID_FADE_TIME],
-		       envelope->fade_length);
+	pidff_set_scaled2(&se[PID_ATTACK_LEVEL], attack_level, PID_ATTACK_MAX);
+	pidff_set_scaled2(&se[PID_FADE_LEVEL], fade_level, PID_FADE_MAX);
+	pidff_set_time(&se[PID_ATTACK_TIME], envelope->attack_length);
+	pidff_set_time(&se[PID_FADE_TIME], envelope->fade_length);
 
-	hid_hw_request(pidff->hid, pidff->reports[PID_SET_ENVELOPE],
-		       HID_REQ_SET_REPORT);
+	pidff_hw_set(pidff, PID_SET_ENVELOPE, false);
 }
 
 /*
