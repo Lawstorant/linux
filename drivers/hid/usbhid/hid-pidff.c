@@ -393,9 +393,9 @@ static u32 pidff_rescale_time(u16 time, struct hid_field *field)
 	return scaled_time;
 }
 
-#define PIDFF_SET_IF_EXISTS(quirk, helper, field, pid, value) \
+#define PIDFF_SET_IF_EXISTS(quirk, helper, usage, value) \
 	({ if (!(pidff->quirks & HID_PIDFF_QUIRK_MISSING_##quirk)) \
-		pidff_##helper(&pidff->set_##field[pid], value); })
+		helper(usage, value); })
 
 static bool pidff_check(struct pidff_usage *usage)
 {
@@ -654,7 +654,7 @@ static void pidff_set_effect_report(struct pidff_device *pidff,
 	/* Linux FF api doesn't support per-effect gain */
 	pidff_set_max(&se[PID_GAIN]);
 	pidff_set_effect_direction(pidff, effect);
-	PIDFF_SET_IF_EXISTS(DELAY, set_time, effect, PID_START_DELAY,
+	PIDFF_SET_IF_EXISTS(DELAY, pidff_set_time, &se[PID_START_DELAY],
 			    effect->replay.delay);
 
 	pidff_hw_set(pidff, PID_SET_EFFECT, false);
@@ -718,18 +718,19 @@ static void pidff_set_condition_report(struct pidff_device *pidff,
 	for (int i = 0; i < max_axis; i++) {
 		struct ff_condition_effect *c = &effect->u.condition[i];
 
-		PIDFF_SET_IF_EXISTS(PBO, set, condition, PID_PARAM_BLOCK_OFFSET, i);
+		PIDFF_SET_IF_EXISTS(PBO, pidff_set_signed,
+				    &sc[PID_PARAM_BLOCK_OFFSET], i);
 
 		pidff_set_signed(&sc[PID_CP_OFFSET], c->center);
 		pidff_set_signed(&sc[PID_POS_COEFFICIENT], c->right_coeff);
 		pidff_set_scaled(&sc[PID_POS_SATURATION], c->right_saturation);
 
-		PIDFF_SET_IF_EXISTS(NEG_COEFFICIENT, set_signed, condition,
-				    PID_NEG_COEFFICIENT, c->left_coeff);
-		PIDFF_SET_IF_EXISTS(NEG_SATURATION, set_signed, condition,
-				    PID_NEG_SATURATION, c->left_saturation);
-		PIDFF_SET_IF_EXISTS(DEADBAND, set, condition,
-				    PID_DEADBAND, c->deadband);
+		PIDFF_SET_IF_EXISTS(NEG_COEFFICIENT, pidff_set_signed,
+				    &sc[PID_NEG_COEFFICIENT], c->left_coeff);
+		PIDFF_SET_IF_EXISTS(NEG_SATURATION, pidff_set_signed,
+				    &sc[PID_NEG_SATURATION], c->left_saturation);
+		PIDFF_SET_IF_EXISTS(DEADBAND, pidff_set,
+				    &sc[PID_POS_SATURATION], c->deadband);
 
 		pidff_hw_set(pidff, PID_SET_CONDITION, false);
 	}
@@ -1084,7 +1085,7 @@ static void pidff_autocenter(struct pidff_device *pidff, u16 magnitude)
 	pidff_set_scaled(&se[PID_GAIN], magnitude);
 	pidff_set(&se[PID_DIRECTION_ENABLE], 1);
 
-	PIDFF_SET_IF_EXISTS(DELAY, set, effect, PID_START_DELAY, 0);
+	PIDFF_SET_IF_EXISTS(DELAY, pidff_set, &se[PID_START_DELAY], 0);
 
 	pidff_hw_set(pidff, PID_SET_EFFECT, false);
 }
