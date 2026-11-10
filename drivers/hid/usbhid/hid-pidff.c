@@ -699,8 +699,7 @@ static void pidff_set_condition_report(struct pidff_device *pidff,
 	int max_axis = pidff->quirks & HID_PIDFF_QUIRK_MISSING_PBO ? 1 : 2;
 	struct pidff_usage *sc = pidff->set_condition;
 
-	sc[PID_EFFECT_BLOCK_INDEX].value[0] =
-		pidff->block_load[PID_EFFECT_BLOCK_INDEX].value[0];
+	pidff_copy_effect_block_index(pidff, sc);
 
 	for (int i = 0; i < max_axis; i++) {
 		struct ff_condition_effect *c = &effect->u.condition[i];
@@ -718,8 +717,7 @@ static void pidff_set_condition_report(struct pidff_device *pidff,
 		PIDFF_SET_IF_EXISTS(DEADBAND, set, condition,
 				    PID_DEADBAND, c->deadband);
 
-		hid_hw_request(pidff->hid, pidff->reports[PID_SET_CONDITION],
-			       HID_REQ_SET_REPORT);
+		pidff_hw_set(pidff, PID_SET_CONDITION, false);
 	}
 }
 
@@ -729,22 +727,21 @@ static void pidff_set_condition_report(struct pidff_device *pidff,
 static bool pidff_needs_set_condition(struct ff_effect *effect,
 				      struct ff_effect *old)
 {
-	int i;
-	int ret = 0;
+	bool need = false;
 
-	for (i = 0; i < 2; i++) {
+	for (int i = 0; i < 2; i++) {
 		struct ff_condition_effect *cond = &effect->u.condition[i];
 		struct ff_condition_effect *old_cond = &old->u.condition[i];
 
-		ret |= cond->center != old_cond->center ||
-		       cond->right_coeff != old_cond->right_coeff ||
-		       cond->left_coeff != old_cond->left_coeff ||
-		       cond->right_saturation != old_cond->right_saturation ||
-		       cond->left_saturation != old_cond->left_saturation ||
-		       cond->deadband != old_cond->deadband;
+		need |= cond->center != old_cond->center ||
+			cond->deadband != old_cond->deadband ||
+			cond->left_coeff != old_cond->left_coeff ||
+			cond->right_coeff != old_cond->right_coeff ||
+			cond->left_saturation != old_cond->left_saturation ||
+			cond->right_saturation != old_cond->right_saturation;
 	}
 
-	return ret;
+	return need;
 }
 
 /*
