@@ -222,27 +222,22 @@ struct pidff_device {
 
 	struct pidff_effect effect[PID_EFFECTS_MAX];
 
-	/*
-	 * Special field is a field that is not composed of
-	 * usage<->value pairs that pidff_usage values are
-	 */
-
 	/* Special field in create_new_effect */
-	struct hid_field *create_new_effect_type;
+	struct pidff_usage *create_new_effect_type;
 
 	/* Special fields in set_effect */
-	struct hid_field *set_effect_type;
-	struct hid_field *effect_direction;
-	struct hid_field *axes_enable;
+	struct pidff_usage *set_effect_type;
+	struct pidff_usage *effect_direction;
+	struct pidff_usage *axes_enable;
 
 	/* Special field in device_control */
-	struct hid_field *device_control;
+	struct pidff_usage *device_control;
 
 	/* Special field in block_load */
-	struct hid_field *block_load_status;
+	struct pidff_usage *block_load_status;
 
 	/* Special field in effect_operation */
-	struct hid_field *effect_operation_status;
+	struct pidff_usage *effect_operation_status;
 
 	int control_id[ARRAY_SIZE(pidff_device_control)];
 	int type_id[ARRAY_SIZE(pidff_effect_types)];
@@ -256,16 +251,6 @@ struct pidff_device {
 };
 
 /* HID helpers */
-static void pidff_set_hid(struct hid_field *field, s32 value)
-{
-	field->value[0] = value;
-}
-
-static s32 pidff_get_hid(struct hid_field *field)
-{
-	return field->value[0];
-}
-
 static void pidff_hw_request(struct pidff_device *pidff, u8 report, bool wait,
 			     enum hid_class_request request)
 {
@@ -522,7 +507,7 @@ static void pidff_set_effect_type(struct pidff_device *pidff,
 	if (effect)
 		type = pidff_get_effect_type_id(pidff, effect);
 
-	pidff_set_hid(&pidff->set_effect_type, type);
+	pidff_set(pidff->set_effect_type, type);
 }
 
 /* Copies EFFECT_BLOCK_INDEX from pidfff->block_load to target */
@@ -800,16 +785,16 @@ static void pidff_set_gain_report(struct pidff_device *pidff, u16 gain)
  */
 static void pidff_set_device_control(struct pidff_device *pidff, int field)
 {
-	struct hid_field *dc = pidff->device_control;
+	struct pidff_usage *dc = pidff->device_control;
 	const int field_index = pidff->control_id[field];
 	/* Detect if the field is a bitmask variable or an array */
-	const bool bitmask = dc->flags & HID_MAIN_ITEM_VARIABLE;
+	const bool bitmask = dc->field->flags & HID_MAIN_ITEM_VARIABLE;
 
 	if (field_index < 1)
 		return;
 
 	if (!bitmask)
-		pidff_set_hid(&dc, field_index);
+		pidff_set(dc, field_index);
 	else {
 		/* Clear current bitmask */
 		for (int i = 0; i < ARRAY_SIZE(pidff_device_control); i++) {
@@ -876,18 +861,18 @@ static int pidff_request_effect_upload(struct pidff_device *pidff, int efnum)
 	struct pidff_usage *bl = pidff->block_load;
 	s32 status = 0;
 
-	pidff_set_hid(pidff->create_new_effect_type, efnum);
+	pidff_set(pidff->create_new_effect_type, efnum);
 	pidff_hw_set(pidff, PID_CREATE_NEW_EFFECT, false);
 	hid_dbg(pidff->hid, "create_new_effect sent, type: %d\n", efnum);
 
 	pidff_set(&bl[PID_EFFECT_BLOCK_INDEX], 0);
-	pidff_set_hid(pidff->block_load_status, 0);
+	pidff_set(pidff->block_load_status, 0);
 	hid_hw_wait(pidff->hid);
 
 	for (int i = 0; i < PIDFF_BLOCK_LOAD_RETRIES; i++) {
 		hid_dbg(pidff->hid, "pid_block_load requested\n");
 		pidff_hw_get(pidff, PID_BLOCK_LOAD, true);
-		status = pidff_get_hid(pidff->block_load_status);
+		status = pidff_get(pidff->block_load_status);
 
 		if (status == pidff->status_id[PID_BLOCK_LOAD_SUCCESS]) {
 			hid_dbg(pidff->hid, "device reported free memory: %d bytes\n",
@@ -927,7 +912,7 @@ static void pidff_playback_pid(struct pidff_device *pidff, int pid_id, int n)
 	const u8 op = n ? PID_EFFECT_START : PID_EFFECT_STOP;
 
 	pidff_set(&pidff->effect_operation[PID_EFFECT_BLOCK_INDEX], pid_id);
-	pidff_set_hid(&pidff->effect_operation_status, pidff->operation_id[op]);
+	pidff_set(pidff->effect_operation_status, pidff->operation_id[op]);
 	pidff_set_clamped(&pidff->effect_operation[PID_LOOP_COUNT], n);
 
 	pidff_hw_set(pidff, PID_EFFECT_OPERATION, false);
@@ -1293,6 +1278,15 @@ static struct hid_field *pidff_find_special_field(struct hid_report *report,
 	return NULL;
 }
 
+static void pidff_set_special_field(struct hid_report *report, uint usage,
+				    bool enforce_min,
+				    struct pidff_usage *special)
+{
+	special->field = pidff_find_special_field(report, usage, enforce_min);
+	if (special->field)
+		special->value = special->field->value;
+}
+
 /*
  * Fill a pidff->*_id struct table
  */
@@ -1326,39 +1320,38 @@ static int pidff_find_special_keys(int *keys, struct hid_field *fld,
  */
 static int pidff_find_special_fields(struct pidff_device *pidff)
 {
-	hid_dbg(pidff->hid, "finding special fields\n");
+	struct hid_report *rep = pidff->reports;
 
-	pidff->create_new_effect_type =
-		pidff_find_special_field(pidff->reports[PID_CREATE_NEW_EFFECT],
-					 PID_EFFECT_TYPE, true);
-	pidff->set_effect_type =
-		pidff_find_special_field(pidff->reports[PID_SET_EFFECT],
-					 PID_EFFECT_TYPE, true);
-	pidff->axes_enable =
-		pidff_find_special_field(pidff->reports[PID_SET_EFFECT],
-					 PID_AXES_ENABLE, false);
-	pidff->effect_direction =
-		pidff_find_special_field(pidff->reports[PID_SET_EFFECT],
-					 PID_DIRECTION, false);
-	pidff->device_control =
-		pidff_find_special_field(pidff->reports[PID_DEVICE_CONTROL],
-					 PID_DEVICE_CONTROL_ARRAY, true);
+	hid_dbg(pidff->hid, "finding special fields\n");
+	pidff_set_special_field(&rep[PID_CREATE_NEW_EFFECT], PID_EFFECT_TYPE,
+				true, pidff->create_new_effect_type);
+
+	pidff_set_special_field(&rep[PID_SET_EFFECT], PID_EFFECT_TYPE,
+				true, pidff->set_effect_type);
+
+	pidff_set_special_field(&rep[PID_SET_EFFECT], PID_AXES_ENABLE,
+				false, pidff->axes_enable);
+
+	pidff_set_special_field(&rep[PID_SET_EFFECT], PID_DIRECTION,
+				false, pidff->effect_direction);
+
+	pidff_set_special_field(&rep[PID_DEVICE_CONTROL], PID_DEVICE_CONTROL_ARRAY,
+				true, pidff->device_control);
 
 	/* Detect and set permissive control quirk */
 	if (!pidff->device_control) {
 		pr_debug("Setting PERMISSIVE_CONTROL quirk\n");
 		pidff->quirks |= HID_PIDFF_QUIRK_PERMISSIVE_CONTROL;
-		pidff->device_control = pidff_find_special_field(
-			pidff->reports[PID_DEVICE_CONTROL],
-			PID_DEVICE_CONTROL_ARRAY, false);
+		pidff_set_special_field(&rep[PID_DEVICE_CONTROL],
+					PID_DEVICE_CONTROL_ARRAY, true,
+					pidff->device_control);
 	}
 
-	pidff->block_load_status =
-		pidff_find_special_field(pidff->reports[PID_BLOCK_LOAD],
-					 PID_BLOCK_LOAD_STATUS, true);
-	pidff->effect_operation_status =
-		pidff_find_special_field(pidff->reports[PID_EFFECT_OPERATION],
-					 PID_EFFECT_OPERATION_ARRAY, true);
+	pidff_set_special_field(&rep[PID_BLOCK_LOAD], PID_BLOCK_LOAD_STATUS,
+				true, pidff->block_load_status);
+
+	pidff_set_special_field(&rep[PID_EFFECT_OPERATION], PID_EFFECT_OPERATION_ARRAY,
+				true, pidff->effect_operation_status);
 
 	hid_dbg(pidff->hid, "search done\n");
 
@@ -1397,7 +1390,7 @@ static int pidff_find_special_fields(struct pidff_device *pidff)
 
 	if (PIDFF_FIND_SPECIAL_KEYS(status_id, block_load_status,
 				    block_load_status) !=
-	    ARRAY_SIZE(pidff_block_load_status)) {
+		ARRAY_SIZE(pidff_block_load_status)) {
 		hid_err(pidff->hid,
 			"block load status identifiers not found\n");
 		return -1;
@@ -1415,14 +1408,13 @@ static int pidff_find_special_fields(struct pidff_device *pidff)
 		return 0;
 	}
 
-	hid_dbg(pidff->hid, "axes enable report count: %u\n",
-		pidff->axes_enable->report_count);
+	uint report_count = pidff->axes_enable->field->report_count;
 
-	uint found = PIDFF_FIND_GENERAL_DESKTOP(direction_axis_id, axes_enable,
-						direction_axis);
+	pidff->axis_count = PIDFF_FIND_GENERAL_DESKTOP(
+		direction_axis_id, axes_enable, direction_axis);
 
-	pidff->axis_count = found;
-	hid_dbg(pidff->hid, "found direction axes: %u", found);
+	hid_dbg(pidff->hid, "axes enable report count: %u\n", report_count);
+	hid_dbg(pidff->hid, "found direction axes: %u", pidff->axis_count);
 
 	for (int i = 0; i < ARRAY_SIZE(pidff_direction_axis); i++) {
 		if (!pidff->direction_axis_id[i])
@@ -1432,9 +1424,9 @@ static int pidff_find_special_fields(struct pidff_device *pidff)
 			pidff_direction_axis[i], pidff->direction_axis_id[i]);
 	}
 
-	if (pidff->axes_enable && found != pidff->axes_enable->report_count)
+	if (pidff->axis_count != report_count)
 		hid_warn(pidff->hid, "axes_enable: %u != direction axes: %u",
-			 pidff->axes_enable->report_count, found);
+			 report_count, pidff->axis_count);
 
 	return 0;
 }
