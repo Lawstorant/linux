@@ -163,6 +163,7 @@ static const u8 pidff_effect_operation_status[] = { 0x79, 0x7b };
 #define PID_DIRECTION_WEST	0xc000
 
 #define PIDFF_FIXED_WHEEL_DIRECTION	PID_DIRECTION_EAST
+#define PIDFF_FETCH_POOL_RETRIES	20
 
 /* AXES_ENABLE and DIRECTION axes */
 enum pid_axes {
@@ -833,21 +834,18 @@ static void pidff_reset(struct pidff_device *pidff)
  */
 static void pidff_fetch_pool(struct pidff_device *pidff)
 {
-	int i;
 	struct hid_device *hid = pidff->hid;
+	struct pidff_usage *psm = &pidff->pool[PID_SIMULTANEOUS_MAX];
 
 	/* Repeat if PID_SIMULTANEOUS_MAX < 2 to make sure it's correct */
-	for (i = 0; i < 20; i++) {
-		hid_hw_request(hid, pidff->reports[PID_POOL], HID_REQ_GET_REPORT);
-		hid_hw_wait(hid);
+	for (int i = 0; i < PIDFF_FETCH_POOL_RETRIES; i++) {
+		pidff_hw_get(pidff, PID_POOL, true);
 
-		if (!pidff->pool[PID_SIMULTANEOUS_MAX].value)
-			return;
-		if (pidff->pool[PID_SIMULTANEOUS_MAX].value[0] >= 2)
+		if (!psm->value || pidff_get(&psm) >= 2)
 			return;
 	}
 	hid_warn(hid, "device reports %d simultaneous effects\n",
-		 pidff->pool[PID_SIMULTANEOUS_MAX].value[0]);
+		 pidff_get(&psm));
 }
 
 /*
