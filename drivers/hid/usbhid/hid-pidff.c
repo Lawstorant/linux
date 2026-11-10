@@ -947,9 +947,8 @@ static int pidff_playback(struct input_dev *dev, int effect_id, int value)
  */
 static void pidff_erase_pid(struct pidff_device *pidff, int pid_id)
 {
-	pidff->block_free[PID_EFFECT_BLOCK_INDEX].value[0] = pid_id;
-	hid_hw_request(pidff->hid, pidff->reports[PID_BLOCK_FREE],
-		       HID_REQ_SET_REPORT);
+	pidff_set(&pidff->block_free[PID_EFFECT_BLOCK_INDEX], pid_id);
+	pidff_hw_set(pidff, PID_BLOCK_FREE, false);
 }
 
 /*
@@ -993,6 +992,8 @@ static int pidff_upload_effect(struct input_dev *dev, struct ff_effect *new,
 			       struct ff_effect *old)
 {
 	struct pidff_device *pidff = dev->ff->private;
+	struct pidff_effect *effect = &pidff->effect[new->id];
+	struct pidff_usage *bl_ebi = &pidff->block_load[PID_EFFECT_BLOCK_INDEX];
 	const int type_id = pidff_get_effect_type_id(pidff, new);
 
 	if (!type_id) {
@@ -1011,16 +1012,12 @@ static int pidff_upload_effect(struct input_dev *dev, struct ff_effect *new,
 
 		pidff->effect_count++;
 		hid_dbg(pidff->hid, "current effect count: %d", pidff->effect_count);
-		pidff->effect[new->id].loop_count = 0;
-		pidff->effect[new->id].pid_id =
-			pidff->block_load[PID_EFFECT_BLOCK_INDEX].value[0];
+		effect->loop_count = 0;
+		effect->pid_id = pidff_get(bl_ebi);
 	}
 
-	pidff->effect[new->id].is_infinite =
-		pidff_is_duration_infinite(new->replay.length);
-
-	pidff->block_load[PID_EFFECT_BLOCK_INDEX].value[0] =
-		pidff->effect[new->id].pid_id;
+	effect->is_infinite = pidff_is_duration_infinite(new->replay.length);
+	pidff_set(bl_ebi, effect->pid_id);
 
 	PIDFF_SET_REPORT_IF_NEEDED(effect, new, old);
 	switch (new->type) {
