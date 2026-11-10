@@ -376,14 +376,14 @@ static u32 pidff_rescale_time(u16 time, struct hid_field *field)
 	({ if (!(pidff->quirks & HID_PIDFF_QUIRK_MISSING_##quirk)) \
 		pidff_##helper(&pidff->set_##field[pid], value); })
 
-static void pidff_set_direct(struct pidff_usage *usage, s32 value)
+static void pidff_set(struct pidff_usage *usage, s32 value)
 {
 	usage->value[0] = value;
 }
 
-static void pidff_set(struct pidff_usage *usage, u16 value)
+static void pidff_set_scaled(struct pidff_usage *usage, u16 value)
 {
-	usage->value[0] = pidff_rescale(value, U16_MAX, usage->field);
+	pidff_set(usage, pidff_rescale(value, U16_MAX, usage->field));
 	pr_debug("calculated from %d to %d\n", value, usage->value[0]);
 }
 
@@ -594,7 +594,7 @@ static void pidff_set_periodic_report(struct pidff_device *pidff,
 			 effect->u.periodic.magnitude);
 	pidff_set_signed(&pidff->set_periodic[PID_OFFSET],
 			 effect->u.periodic.offset);
-	pidff_set(&pidff->set_periodic[PID_PHASE], effect->u.periodic.phase);
+	pidff_set_scaled(&pidff->set_periodic[PID_PHASE], effect->u.periodic.phase);
 	pidff_set_time(&pidff->set_periodic[PID_PERIOD],
 		       effect->u.periodic.period);
 
@@ -630,12 +630,11 @@ static void pidff_set_condition_report(struct pidff_device *pidff,
 	for (int i = 0; i < max_axis; i++) {
 		struct ff_condition_effect *c = &effect->u.condition[i];
 
-		PIDFF_SET_IF_EXISTS(PBO, set_direct, condition,
-				    PID_PARAM_BLOCK_OFFSET, i);
+		PIDFF_SET_IF_EXISTS(PBO, set, condition, PID_PARAM_BLOCK_OFFSET, i);
 
 		pidff_set_signed(&sc[PID_CP_OFFSET], c->center);
 		pidff_set_signed(&sc[PID_POS_COEFFICIENT], c->right_coeff);
-		pidff_set(&sc[PID_POS_SATURATION], c->right_saturation);
+		pidff_set_scaled(&sc[PID_POS_SATURATION], c->right_saturation);
 
 		PIDFF_SET_IF_EXISTS(NEG_COEFFICIENT, set_signed, condition,
 				    PID_NEG_COEFFICIENT, c->left_coeff);
@@ -706,7 +705,7 @@ static void pidff_set_gain_report(struct pidff_device *pidff, u16 gain)
 	if (!pidff->device_gain[PID_DEVICE_GAIN_FIELD].field)
 		return;
 
-	pidff_set(&pidff->device_gain[PID_DEVICE_GAIN_FIELD], gain);
+	pidff_set_scaled(&pidff->device_gain[PID_DEVICE_GAIN_FIELD], gain);
 	hid_hw_request(pidff->hid, pidff->reports[PID_DEVICE_GAIN],
 		       HID_REQ_SET_REPORT);
 }
@@ -1015,9 +1014,9 @@ static void pidff_autocenter(struct pidff_device *pidff, u16 magnitude)
 	pidff->set_effect[PID_DURATION].value[0] = 0;
 	pidff->set_effect[PID_TRIGGER_BUTTON].value[0] = 0;
 	pidff->set_effect[PID_TRIGGER_REPEAT_INT].value[0] = 0;
-	pidff_set(&pidff->set_effect[PID_GAIN], magnitude);
+	pidff_set_scaled(&pidff->set_effect[PID_GAIN], magnitude);
 	pidff->set_effect[PID_DIRECTION_ENABLE].value[0] = 1;
-	PIDFF_SET_IF_EXISTS(DELAY, set_direct, effect, PID_START_DELAY, 0);
+	PIDFF_SET_IF_EXISTS(DELAY, set, effect, PID_START_DELAY, 0);
 
 	hid_hw_request(pidff->hid, pidff->reports[PID_SET_EFFECT],
 		       HID_REQ_SET_REPORT);
