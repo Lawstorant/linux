@@ -486,6 +486,21 @@ static void pidff_set_duration(struct pidff_usage *usage, u16 duration)
 	pidff_set_time(usage, duration);
 }
 
+/*
+ * Converts ff_effect type to pid type.
+ * Uses fallback (eg PID_SPRING) if effect is NULL
+ */
+static void pidff_set_effect_type(struct pidff_device *pidff,
+				  struct ff_effect *effect, u8 fallback)
+{
+	int type = pidff->type_id[fallback];
+
+	if (effect)
+		type = pidff_get_effect_type_id(pidff, effect);
+
+	pidff_set_hid(&pidff->set_effect_type, type);
+}
+
 static void pidff_set_effect_direction(struct pidff_device *pidff,
 				       struct ff_effect *effect)
 {
@@ -1065,28 +1080,26 @@ static void pidff_set_gain(struct input_dev *dev, u16 gain)
 
 static void pidff_autocenter(struct pidff_device *pidff, u16 magnitude)
 {
-	struct hid_field *field =
-		pidff->block_load[PID_EFFECT_BLOCK_INDEX].field;
+	struct hid_field *bl = pidff->block_load[PID_EFFECT_BLOCK_INDEX].field;
+	struct pidff_usage *se = pidff->set_effect;
+	bool play = magnitude > 1;
 
-	if (!magnitude) {
-		pidff_playback_pid(pidff, field->logical_minimum, 0);
+	pidff_playback_pid(pidff, bl->logical_minimum, play);
+	if (!play)
 		return;
-	}
 
-	pidff_playback_pid(pidff, field->logical_minimum, 1);
+	pidff_set(&se[PID_EFFECT_BLOCK_INDEX], bl->logical_minimum);
+	pidff_set_effect_type(pidff, NULL, PID_SPRING);
 
-	pidff->set_effect[PID_EFFECT_BLOCK_INDEX].value[0] =
-		pidff->block_load[PID_EFFECT_BLOCK_INDEX].field->logical_minimum;
-	pidff->set_effect_type->value[0] = pidff->type_id[PID_SPRING];
-	pidff->set_effect[PID_DURATION].value[0] = 0;
-	pidff->set_effect[PID_TRIGGER_BUTTON].value[0] = 0;
-	pidff->set_effect[PID_TRIGGER_REPEAT_INT].value[0] = 0;
-	pidff_set_scaled(&pidff->set_effect[PID_GAIN], magnitude);
-	pidff->set_effect[PID_DIRECTION_ENABLE].value[0] = 1;
+	pidff_set(&se[PID_DURATION], 0);
+	pidff_set(&se[PID_TRIGGER_BUTTON], 0);
+	pidff_set(&se[PID_TRIGGER_REPEAT_INT], 0);
+	pidff_set_scaled(&se[PID_GAIN], magnitude);
+	pidff_set(&se[PID_DIRECTION_ENABLE], 1);
+
 	PIDFF_SET_IF_EXISTS(DELAY, set, effect, PID_START_DELAY, 0);
 
-	hid_hw_request(pidff->hid, pidff->reports[PID_SET_EFFECT],
-		       HID_REQ_SET_REPORT);
+	pidff_hw_set(pidff, PID_SET_EFFECT, false);
 }
 
 /*
