@@ -412,6 +412,11 @@ static s32 pidff_get_safe(struct pidff_usage *usage, s32 fallback)
 
 static void pidff_set(struct pidff_usage *usage, s32 value)
 {
+	if (!usage->value) {
+		pr_err("%s: usage invalid\n", __func__);
+		return;
+	}
+
 	*usage->value = value;
 }
 
