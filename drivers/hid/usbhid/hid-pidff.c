@@ -389,30 +389,35 @@ static void pidff_set_scaled(struct pidff_usage *usage, u16 value)
 
 static void pidff_set_signed(struct pidff_usage *usage, s16 value)
 {
+	int result = 0;
+
 	if (usage->field->logical_minimum < 0)
-		usage->value[0] = pidff_rescale_signed(value, usage->field);
+		result = pidff_rescale_signed(value, usage->field);
 	else {
 		if (value < 0)
-			usage->value[0] =
-				pidff_rescale(-value, -S16_MIN, usage->field);
+			result = pidff_rescale(-value, -S16_MIN, usage->field);
 		else
-			usage->value[0] =
-				pidff_rescale(value, S16_MAX, usage->field);
+			result = pidff_rescale(value, S16_MAX, usage->field);
 	}
+
+	pidff_set(usage, result);
 	pr_debug("calculated from %d to %d\n", value, usage->value[0]);
 }
 
 static void pidff_set_time(struct pidff_usage *usage, u16 time)
 {
-	usage->value[0] = pidff_clamp(pidff_rescale_time(time, usage->field),
-				      usage->field);
+	s32 rescaled;
+
+	rescaled = pidff_rescale_time(time, usage->field);
+	rescaled = pidff_clamp(rescaled, usage->field);
+	pidff_set(usage, rescaled);
 }
 
 static void pidff_set_duration(struct pidff_usage *usage, u16 duration)
 {
 	/* PID defines INFINITE as the max possible value for duration field */
 	if (pidff_is_duration_infinite(duration)) {
-		usage->value[0] = (1U << usage->field->report_size) - 1;
+		pidff_set(usage, (1U << usage->field->report_size) - 1);
 		return;
 	}
 
