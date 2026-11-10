@@ -399,7 +399,7 @@ static u32 pidff_rescale_time(u16 time, struct hid_field *field)
 
 static s32 pidff_get(struct pidff_usage *usage)
 {
-	return usage->value[0];
+	return *usage->value;
 }
 
 static s32 pidff_get_safe(struct pidff_usage *usage, s32 fallback)
@@ -412,7 +412,7 @@ static s32 pidff_get_safe(struct pidff_usage *usage, s32 fallback)
 
 static void pidff_set(struct pidff_usage *usage, s32 value)
 {
-	usage->value[0] = value;
+	*usage->value = value;
 }
 
 static void pidff_copy(struct pidff_usage *source, struct pidff_usage *target)
