@@ -397,6 +397,15 @@ static u32 pidff_rescale_time(u16 time, struct hid_field *field)
 	({ if (!(pidff->quirks & HID_PIDFF_QUIRK_MISSING_##quirk)) \
 		pidff_##helper(&pidff->set_##field[pid], value); })
 
+static bool pidff_check(struct pidff_usage *usage)
+{
+	if (usage->value)
+		return true;
+
+	pr_err("%s: usage invalid\n", __func__);
+	return false;
+}
+
 static s32 pidff_get(struct pidff_usage *usage)
 {
 	return *usage->value;
@@ -412,12 +421,8 @@ static s32 pidff_get_safe(struct pidff_usage *usage, s32 fallback)
 
 static void pidff_set(struct pidff_usage *usage, s32 value)
 {
-	if (!usage->value) {
-		pr_err("%s: usage invalid\n", __func__);
-		return;
-	}
-
-	*usage->value = value;
+	if (pidff_check(usage))
+		*usage->value = value;
 }
 
 static void pidff_copy(struct pidff_usage *source, struct pidff_usage *target)
