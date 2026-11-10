@@ -605,13 +605,11 @@ static bool pidff_needs_set_envelope(struct ff_envelope *envelope,
 static void pidff_set_constant_report(struct pidff_device *pidff,
 				      struct ff_effect *effect)
 {
-	pidff->set_constant[PID_EFFECT_BLOCK_INDEX].value[0] =
-		pidff->block_load[PID_EFFECT_BLOCK_INDEX].value[0];
-	pidff_set_signed(&pidff->set_constant[PID_MAGNITUDE],
-			 effect->u.constant.level);
+	struct pidff_usage *sc = pidff->set_constant;
 
-	hid_hw_request(pidff->hid, pidff->reports[PID_SET_CONSTANT],
-		       HID_REQ_SET_REPORT);
+	pidff_copy_effect_block_index(pidff, sc);
+	pidff_set_signed(&sc[PID_MAGNITUDE], effect->u.constant.level);
+	pidff_hw_set(pidff, PID_SET_CONSTANT, false);
 }
 
 /*
@@ -667,18 +665,16 @@ static bool pidff_needs_set_effect(struct ff_effect *effect,
 static void pidff_set_periodic_report(struct pidff_device *pidff,
 				      struct ff_effect *effect)
 {
-	pidff->set_periodic[PID_EFFECT_BLOCK_INDEX].value[0] =
-		pidff->block_load[PID_EFFECT_BLOCK_INDEX].value[0];
-	pidff_set_signed(&pidff->set_periodic[PID_MAGNITUDE],
-			 effect->u.periodic.magnitude);
-	pidff_set_signed(&pidff->set_periodic[PID_OFFSET],
-			 effect->u.periodic.offset);
-	pidff_set_scaled(&pidff->set_periodic[PID_PHASE], effect->u.periodic.phase);
-	pidff_set_time(&pidff->set_periodic[PID_PERIOD],
-		       effect->u.periodic.period);
+	struct pidff_usage *sp = pidff->set_periodic;
 
-	hid_hw_request(pidff->hid, pidff->reports[PID_SET_PERIODIC],
-		       HID_REQ_SET_REPORT);
+	pidff_copy_effect_block_index(pidff, sp);
+
+	pidff_set_signed(&sp[PID_MAGNITUDE], effect->u.periodic.magnitude);
+	pidff_set_signed(&sp[PID_OFFSET], effect->u.periodic.offset);
+	pidff_set_scaled(&sp[PID_PHASE], effect->u.periodic.phase);
+	pidff_set_time(&sp[PID_PERIOD], effect->u.periodic.period);
+
+	pidff_hw_set(pidff, PID_SET_PERIODIC, false);
 }
 
 /*
@@ -688,9 +684,9 @@ static bool pidff_needs_set_periodic(struct ff_effect *effect,
 				     struct ff_effect *old)
 {
 	return effect->u.periodic.magnitude != old->u.periodic.magnitude ||
-	       effect->u.periodic.offset != old->u.periodic.offset ||
-	       effect->u.periodic.phase != old->u.periodic.phase ||
-	       effect->u.periodic.period != old->u.periodic.period;
+	       effect->u.periodic.offset    != old->u.periodic.offset    ||
+	       effect->u.periodic.phase     != old->u.periodic.phase     ||
+	       effect->u.periodic.period    != old->u.periodic.period;
 }
 
 /*
