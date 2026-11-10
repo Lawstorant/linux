@@ -1648,28 +1648,20 @@ int hid_pidff_init_with_quirks(struct hid_device *hid, u32 initial_quirks)
 	    pidff->block_load[PID_EFFECT_BLOCK_INDEX].field->logical_maximum -
 	    pidff->block_load[PID_EFFECT_BLOCK_INDEX].field->logical_minimum +
 	    1;
+
 	hid_dbg(hid, "max effects is %d\n", max_effects);
+	hid_dbg(hid, "max simultaneous effects is %d\n",
+		pidff_get_safe(&pidff->pool[PID_SIMULTANEOUS_MAX], -1));
+	hid_dbg(hid, "device memory size is %d bytes\n",
+		pidff_get_safe(&pidff->pool[PID_RAM_POOL_SIZE], -1));
 
-	if (max_effects > PID_EFFECTS_MAX)
-		max_effects = PID_EFFECTS_MAX;
-
-	if (pidff->pool[PID_SIMULTANEOUS_MAX].value)
-		hid_dbg(hid, "max simultaneous effects is %d\n",
-			pidff->pool[PID_SIMULTANEOUS_MAX].value[0]);
-
-	if (pidff->pool[PID_RAM_POOL_SIZE].value)
-		hid_dbg(hid, "device memory size is %d bytes\n",
-			pidff->pool[PID_RAM_POOL_SIZE].value[0]);
-
-	if (pidff->pool[PID_DEVICE_MANAGED_POOL].value &&
-	    pidff->pool[PID_DEVICE_MANAGED_POOL].value[0] == 0) {
+	if (!pidff_get_safe(&pidff->pool[PID_DEVICE_MANAGED_POOL], 0)) {
 		error = -EPERM;
-		hid_notice(hid,
-			   "device does not support device managed pool\n");
+		hid_notice(hid, "device does not support device managed pool\n");
 		goto fail;
 	}
 
-	error = input_ff_create(dev, max_effects);
+	error = input_ff_create(dev, MAX(max_effects, PID_EFFECTS_MAX));
 	if (error)
 		goto fail;
 
