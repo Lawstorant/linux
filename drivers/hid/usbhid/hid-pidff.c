@@ -450,7 +450,7 @@ static void pidff_set_max(struct pidff_usage *usage)
 static void pidff_set_scaled2(struct pidff_usage *usage, u16 value, u16 max)
 {
 	pidff_set(usage, pidff_rescale(value, max, usage->field));
-	pr_debug("calculated from %d to %d\n", value, usage->value[0]);
+	pr_debug("scaled from %d to %d\n", value, pidff_get(usage));
 }
 
 static void pidff_set_scaled(struct pidff_usage *usage, u16 value)
