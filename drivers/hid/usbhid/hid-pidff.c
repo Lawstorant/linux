@@ -376,9 +376,46 @@ static u32 pidff_rescale_time(u16 time, struct hid_field *field)
 	({ if (!(pidff->quirks & HID_PIDFF_QUIRK_MISSING_##quirk)) \
 		pidff_##helper(&pidff->set_##field[pid], value); })
 
+static s32 pidff_get(struct pidff_usage *usage)
+{
+	return usage->value[0];
+}
+
 static void pidff_set(struct pidff_usage *usage, s32 value)
 {
 	usage->value[0] = value;
+}
+
+static void pidff_copy(struct pidff_usage *source, struct pidff_usage *target)
+{
+	pidff_set(target, pidff_get(source));
+}
+
+static void pidff_set_clamped(struct pidff_usage *usage, s32 value)
+{
+	pidff_set(usage, pidff_clamp(value, usage->field));
+}
+
+static void pidff_set_clamped2(struct pidff_usage *usage, s32 value, s32 min,
+			       s32 max)
+{
+	pidff_set(usage, (s32)clamp(value, min, max));
+}
+
+static void pidff_set_valid(struct pidff_usage *usage, s32 value)
+{
+	if (value < usage->field->logical_minimum ||
+	    value > usage->field->logical_maximum) {
+		pidff_set(usage, 0);
+		return;
+	}
+
+	pidff_set(usage, value);
+}
+
+static void pidff_set_max(struct pidff_usage *usage)
+{
+	pidff_set(usage, usage->field->logical_maximum);
 }
 
 static void pidff_set_scaled(struct pidff_usage *usage, u16 value)
