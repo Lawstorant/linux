@@ -425,6 +425,12 @@ static void pidff_set(struct pidff_usage *usage, s32 value)
 		*usage->value = value;
 }
 
+static void pidff_set_arr(struct pidff_usage *usage, uint index, s32 value)
+{
+	if (pidff_check(usage))
+		usage->value[index] = value;
+}
+
 static void pidff_copy(struct pidff_usage *source, struct pidff_usage *target)
 {
 	pidff_set(target, pidff_get(source));
@@ -553,14 +559,13 @@ static void pidff_set_effect_direction(struct pidff_device *pidff,
 	for (int i = 0; i < PID_AXES_COUNT; i++) {
 		/* HID index starts with 1 */
 		int index = pidff->direction_axis_id[i] - 1;
-
+		u16 direction = pidff_rescale(direction, U16_MAX,
+					      pidff->effect_direction);
 		if (index < 0)
 			continue;
 
-
-		pidff_set(pidff->axes_enable, 1);
-		pidff->effect_direction->value[index] = pidff_rescale(
-			direction, U16_MAX, pidff->effect_direction);
+		pidff_set_arr(pidff->axes_enable, index, 1);
+		pidff_set_arr(pidff->effect_direction, index, direction);
 	}
 }
 
@@ -810,10 +815,9 @@ static void pidff_set_device_control(struct pidff_device *pidff, int field)
 			int index = pidff->control_id[i];
 
 			if (index > 0)
-				dc->value[index - 1] = 0;
+				pidff_set_arr(dc, index - 1, 0);
 		}
-
-		dc->value[field_index - 1] = 1;
+		pidff_set_arr(dc, field_index - 1, 1);
 	}
 
 	pidff_hw_set(pidff, PID_DEVICE_CONTROL, true);
