@@ -1182,9 +1182,7 @@ static int pidff_find_fields(struct pidff_usage *usage, const u8 *table,
  */
 static int pidff_check_usage(int usage)
 {
-	int i;
-
-	for (i = 0; i < ARRAY_SIZE(pidff_reports); i++)
+	for (int i = 0; i < ARRAY_SIZE(pidff_reports); i++)
 		if (usage == (HID_UP_PID | pidff_reports[i]))
 			return i;
 
