@@ -522,16 +522,15 @@ static void pidff_set_effect_direction(struct pidff_device *pidff,
 				       struct ff_effect *effect)
 {
 	u16 direction = effect->direction;
-	int direction_enable = 1;
+	const int direction_enable = 1;
 
 	/* Use fixed direction if needed */
 	if (pidff->quirks & HID_PIDFF_QUIRK_FIX_CONDITIONAL_DIRECTION &&
 	    pidff_is_effect_conditional(effect))
 		direction = PIDFF_FIXED_WHEEL_DIRECTION;
 
-	pidff->set_effect[PID_DIRECTION_ENABLE].value[0] = direction_enable;
-	pidff->effect_direction->value[0] =
-		pidff_rescale(direction, U16_MAX, pidff->effect_direction);
+	pidff_set(&pidff->set_effect[PID_DIRECTION_ENABLE], direction_enable);
+	pidff_set_scaled(pidff->effect_direction, direction);
 
 	if (direction_enable)
 		return;
@@ -540,7 +539,6 @@ static void pidff_set_effect_direction(struct pidff_device *pidff,
 	 * For use with improved FFB API
 	 * We want to read the selected axes and their direction from the effect
 	 * struct and only enable those. For now, enable all axes.
-	 *
 	 */
 	for (int i = 0; i < PID_AXES_COUNT; i++) {
 		/* HID index starts with 1 */
@@ -549,7 +547,8 @@ static void pidff_set_effect_direction(struct pidff_device *pidff,
 		if (index < 0)
 			continue;
 
-		pidff->axes_enable->value[index] = 1;
+
+		pidff_set(pidff->axes_enable, 1);
 		pidff->effect_direction->value[index] = pidff_rescale(
 			direction, U16_MAX, pidff->effect_direction);
 	}
