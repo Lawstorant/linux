@@ -393,6 +393,10 @@ static u32 pidff_rescale_time(u16 time, struct hid_field *field)
 	return scaled_time;
 }
 
+/*
+ * Set the value only if HID_PIDFF_QUIRK_MISSING_@quirk is not set,
+ * using the provided helper function (eg pidff_set).
+ */
 #define PIDFF_SET_IF_EXISTS(quirk, helper, usage, value) \
 	({ if (!(pidff->quirks & HID_PIDFF_QUIRK_MISSING_##quirk)) \
 		helper(usage, value); })
