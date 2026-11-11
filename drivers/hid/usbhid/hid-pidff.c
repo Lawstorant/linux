@@ -1070,7 +1070,7 @@ static void pidff_autocenter(struct pidff_device *pidff, u16 magnitude)
 {
 	struct hid_field *bl = pidff->block_load[PID_EFFECT_BLOCK_INDEX].field;
 	struct pidff_usage *se = pidff->set_effect;
-	bool play = magnitude > 1;
+	bool play = magnitude > 0;
 
 	pidff_playback_pid(pidff, bl->logical_minimum, play);
 	if (!play)
