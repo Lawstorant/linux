@@ -423,16 +423,15 @@ static s32 pidff_get_safe(struct pidff_usage *usage, s32 fallback)
 	return pidff_get(usage);
 }
 
-static void pidff_set(struct pidff_usage *usage, s32 value)
-{
-	if (pidff_check(usage))
-		*usage->value = value;
-}
-
 static void pidff_set_arr(struct pidff_usage *usage, uint index, s32 value)
 {
 	if (pidff_check(usage))
 		usage->value[index] = value;
+}
+
+static void pidff_set(struct pidff_usage *usage, s32 value)
+{
+	pidff_set_arr(usage, 0, value);
 }
 
 static void pidff_copy(struct pidff_usage *source, struct pidff_usage *target)
