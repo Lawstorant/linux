@@ -951,46 +951,48 @@ static void pidff_fetch_pool(struct pidff_device *pidff)
  * Reset and enable actuators if no effects were present on the device
  *
  * Returns 0 if device reported success, -ENOSPC if the device reported memory
- * is full. Upon unknown response the function will retry for 60 times, if
- * still unsuccessful -EIO is returned.
+ * is full. Upon unknown response the function will retry for
+ * PIDFF_BLOCK_LOAD_RETRIES times. If still unsuccessful -EIO is returned.
  */
 static int pidff_request_effect_upload(struct pidff_device *pidff, int efnum)
 {
-	pidff->create_new_effect_type.field->value[0] = efnum;
-	hid_hw_request(pidff->hid, pidff->reports[PID_CREATE_NEW_EFFECT],
-		       HID_REQ_SET_REPORT);
+	struct pidff_usage *bl = pidff->block_load;
+	s32 status = 0;
+
+	pidff_set(&pidff->create_new_effect_type, efnum);
+	pidff_hw_set(pidff, PID_CREATE_NEW_EFFECT, false);
 	hid_dbg(pidff->hid, "create_new_effect sent, type: %d\n", efnum);
 
-	pidff->block_load[PID_EFFECT_BLOCK_INDEX].value[0] = 0;
-	pidff->block_load_status.field->value[0] = 0;
+	pidff_set(&bl[PID_EFFECT_BLOCK_INDEX], 0);
+	pidff_set(&pidff->block_load_status, 0);
 	hid_hw_wait(pidff->hid);
 
-	for (int i = 0; i < 60; i++) {
-		hid_dbg(pidff->hid, "pid_block_load requested\n");
-		hid_hw_request(pidff->hid, pidff->reports[PID_BLOCK_LOAD],
-			       HID_REQ_GET_REPORT);
-		hid_hw_wait(pidff->hid);
-		if (pidff->block_load_status.field->value[0] ==
-		    pidff->status_id[PID_BLOCK_LOAD_SUCCESS]) {
+	for (int i = 0; i < PIDFF_BLOCK_LOAD_RETRIES; i++) {
+		hid_dbg(pidff->hid, "pid_block_load requested %d/%u\n", i + 1,
+			PIDFF_BLOCK_LOAD_RETRIES);
+
+		pidff_hw_get(pidff, PID_BLOCK_LOAD, true);
+		status = pidff_get(&pidff->block_load_status);
+
+		if (status == pidff->status_id[PID_BLOCK_LOAD_SUCCESS]) {
 			hid_dbg(pidff->hid, "device reported free memory: %d bytes\n",
-				 pidff->block_load[PID_RAM_POOL_AVAILABLE].value ?
-				 pidff->block_load[PID_RAM_POOL_AVAILABLE].value[0] : -1);
+				pidff_get_safe(&bl[PID_RAM_POOL_AVAILABLE], -1));
 			return 0;
 		}
-		if (pidff->block_load_status.field->value[0] ==
-		    pidff->status_id[PID_BLOCK_LOAD_FULL]) {
-			hid_dbg(pidff->hid, "not enough memory free: %d bytes\n",
-				pidff->block_load[PID_RAM_POOL_AVAILABLE].value ?
-				pidff->block_load[PID_RAM_POOL_AVAILABLE].value[0] : -1);
+
+		if (status == pidff->status_id[PID_BLOCK_LOAD_FULL]) {
+			hid_dbg(pidff->hid, "not enough memory, free: %d bytes\n",
+				pidff_get_safe(&bl[PID_RAM_POOL_AVAILABLE], -1));
 			return -ENOSPC;
 		}
-		if (pidff->block_load_status.field->value[0] ==
-		    pidff->status_id[PID_BLOCK_LOAD_ERROR]) {
+
+		if (status == pidff->status_id[PID_BLOCK_LOAD_ERROR]) {
 			hid_dbg(pidff->hid, "device error during effect creation\n");
 			return -EREMOTEIO;
 		}
 	}
-	hid_err(pidff->hid, "pid_block_load failed 60 times\n");
+
+	hid_err(pidff->hid, "pid_block_load failed %u times\n", PIDFF_BLOCK_LOAD_RETRIES);
 	return -EIO;
 }
 
