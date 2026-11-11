@@ -882,33 +882,31 @@ static void pidff_set_gain_report(struct pidff_device *pidff, u16 gain)
  */
 static void pidff_set_device_control(struct pidff_device *pidff, int field)
 {
+	struct pidff_usage *dc = &pidff->device_control;
 	const int field_index = pidff->control_id[field];
+	/* Detect if the field is a bitmask variable or an array */
+	const bool bitmask = dc->field->flags & HID_MAIN_ITEM_VARIABLE;
+
+	hid_dbg(pidff->hid, "DEVICE_CONTROL is %s\n",
+		bitmask ? "a bitmask" : "an array");
 
 	if (field_index < 1)
 		return;
 
-	/* Detect if the field is a bitmask variable or an array */
-	if (pidff->device_control.field->flags & HID_MAIN_ITEM_VARIABLE) {
-		hid_dbg(pidff->hid, "DEVICE_CONTROL is a bitmask\n");
-
+	if (!bitmask)
+		pidff_set(dc, field_index);
+	else {
 		/* Clear current bitmask */
 		for (int i = 0; i < ARRAY_SIZE(pidff_device_control); i++) {
 			int index = pidff->control_id[i];
 
-			if (index < 1)
-				continue;
-
-			pidff->device_control.field->value[index - 1] = 0;
+			if (index > 0)
+				pidff_set_arr(dc, index - 1, 0);
 		}
-
-		pidff->device_control.field->value[field_index - 1] = 1;
-	} else {
-		hid_dbg(pidff->hid, "DEVICE_CONTROL is an array\n");
-		pidff->device_control.field->value[0] = field_index;
+		pidff_set_arr(dc, field_index - 1, 1);
 	}
 
-	hid_hw_request(pidff->hid, pidff->reports[PID_DEVICE_CONTROL], HID_REQ_SET_REPORT);
-	hid_hw_wait(pidff->hid);
+	pidff_hw_set(pidff, PID_DEVICE_CONTROL, true);
 	hid_dbg(pidff->hid, "Device control command 0x%02x sent",
 		pidff_device_control[field]);
 }
@@ -921,7 +919,7 @@ static void pidff_reset(struct pidff_device *pidff)
 	/* We reset twice as sometimes hid_wait_io isn't waiting long enough */
 	pidff_set_device_control(pidff, PID_RESET);
 	pidff_set_device_control(pidff, PID_RESET);
-	pidff->effect_count = 0;
+	pidff_reset_effect_cnt(pidff);
 
 	pidff_set_device_control(pidff, PID_STOP_ALL_EFFECTS);
 	pidff_set_device_control(pidff, PID_ENABLE_ACTUATORS);
