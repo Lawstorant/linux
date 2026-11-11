@@ -879,7 +879,7 @@ static void pidff_reset(struct pidff_device *pidff)
 	/* We reset twice as sometimes hid_wait_io isn't waiting long enough */
 	pidff_set_device_control(pidff, PID_RESET);
 	pidff_set_device_control(pidff, PID_RESET);
-	pidff->effect_count = 0;
+	pidff_reset_effect_cnt(pidff);
 
 	pidff_set_device_control(pidff, PID_STOP_ALL_EFFECTS);
 	pidff_set_device_control(pidff, PID_ENABLE_ACTUATORS);
@@ -1011,6 +1011,9 @@ static int pidff_erase_effect(struct input_dev *dev, int effect_id)
 	struct pidff_device *pidff = dev->ff->private;
 	int pid_id = pidff->effect[effect_id].pid_id;
 
+	if(!pidff_get_effect_cnt(pidff))
+		return -EINVAL;
+
 	hid_dbg(pidff->hid, "starting to erase %d/%d\n", effect_id, pid_id);
 
 	/*
@@ -1021,10 +1024,7 @@ static int pidff_erase_effect(struct input_dev *dev, int effect_id)
 	pidff_playback_pid(pidff, pid_id, 0);
 	pidff_erase_pid(pidff, pid_id);
 
-	if (pidff->effect_count > 0)
-		pidff->effect_count--;
-
-	hid_dbg(pidff->hid, "current effect count: %d", pidff->effect_count);
+	pidff_dec_effect_cnt(pidff);
 	return 0;
 }
 
@@ -1053,7 +1053,7 @@ static int pidff_upload_effect(struct input_dev *dev, struct ff_effect *new,
 		return -EINVAL;
 	}
 
-	if (!pidff->effect_count)
+	if (!pidff_get_effect_cnt(pidff))
 		pidff_reset(pidff);
 
 	if (!old) {
@@ -1062,8 +1062,7 @@ static int pidff_upload_effect(struct input_dev *dev, struct ff_effect *new,
 		if (error)
 			return error;
 
-		pidff->effect_count++;
-		hid_dbg(pidff->hid, "current effect count: %d", pidff->effect_count);
+		pidff_inc_effect_cnt(pidff);
 		effect->loop_count = 0;
 		effect->pid_id = pidff_get(bl_ebi);
 	}
