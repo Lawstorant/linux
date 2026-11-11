@@ -403,7 +403,7 @@ static u32 pidff_rescale_time(u16 time, struct hid_field *field)
 
 static bool pidff_check(struct pidff_usage *usage)
 {
-	if (usage->value)
+	if (usage->field && usage->value)
 		return true;
 
 	pr_err("%s: usage invalid\n", __func__);
