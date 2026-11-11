@@ -722,39 +722,24 @@ static bool pidff_needs_set_constant(struct ff_effect *effect,
 static void pidff_set_effect_report(struct pidff_device *pidff,
 				    struct ff_effect *effect)
 {
-	pidff->set_effect[PID_EFFECT_BLOCK_INDEX].value[0] =
-		pidff->block_load[PID_EFFECT_BLOCK_INDEX].value[0];
-	pidff->set_effect_type.field->value[0] =
-		pidff_get_effect_type_id(pidff, effect);
+	struct pidff_usage *se = pidff->set_effect;
 
-	pidff_set_duration(&pidff->set_effect[PID_DURATION],
-			   effect->replay.length);
+	pidff_copy_effect_block_index(pidff, se);
+	pidff_set_effect_type(pidff, effect, 0);
 
-	/* Some games set this to random values that can be out of range */
-	s32 trigger_button_max =
-		pidff->set_effect[PID_TRIGGER_BUTTON].field->logical_maximum;
-	if (effect->trigger.button <= trigger_button_max) {
-		pidff->set_effect[PID_TRIGGER_BUTTON].value[0] =
-			effect->trigger.button;
-		pidff_set_time(&pidff->set_effect[PID_TRIGGER_REPEAT_INT],
-			       effect->trigger.interval);
-	} else {
-		pidff->set_effect[PID_TRIGGER_BUTTON].value[0] = 0;
-		pidff->set_effect[PID_TRIGGER_REPEAT_INT].value[0] = 0;
-	}
-
-	pidff->set_effect[PID_GAIN].value[0] =
-		pidff->set_effect[PID_GAIN].field->logical_maximum;
-
+	/* Linux FF api doesn't support per-effect gain */
+	pidff_set_max(&se[PID_GAIN]);
 	pidff_set_effect_direction(pidff, effect);
 
-	/* Omit setting delay field if it's missing */
-	if (!(pidff->quirks & HID_PIDFF_QUIRK_MISSING_DELAY))
-		pidff_set_time(&pidff->set_effect[PID_START_DELAY],
-			       effect->replay.delay);
+	/* Some games set this to random values that can be out of range */
+	pidff_set_valid(&se[PID_TRIGGER_BUTTON], effect->trigger.button);
+	pidff_set_time(&se[PID_TRIGGER_REPEAT_INT], effect->trigger.interval);
 
-	hid_hw_request(pidff->hid, pidff->reports[PID_SET_EFFECT],
-		       HID_REQ_SET_REPORT);
+	pidff_set_duration(&se[PID_DURATION], effect->replay.length);
+	PIDFF_SET_IF_EXISTS(DELAY, pidff_set_time, &se[PID_START_DELAY],
+			    effect->replay.delay);
+
+	pidff_hw_set(pidff, PID_SET_EFFECT, false);
 }
 
 /*
@@ -763,11 +748,11 @@ static void pidff_set_effect_report(struct pidff_device *pidff,
 static bool pidff_needs_set_effect(struct ff_effect *effect,
 				   struct ff_effect *old)
 {
-	return effect->replay.length != old->replay.length ||
-	       effect->trigger.interval != old->trigger.interval ||
-	       effect->trigger.button != old->trigger.button ||
-	       effect->direction != old->direction ||
-	       effect->replay.delay != old->replay.delay;
+	return  effect->direction        != old->direction        ||
+		effect->trigger.button   != old->trigger.button   ||
+		effect->trigger.interval != old->trigger.interval ||
+		effect->replay.length    != old->replay.length    ||
+		effect->replay.delay     != old->replay.delay;
 }
 
 /*
