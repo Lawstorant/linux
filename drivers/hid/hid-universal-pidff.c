@@ -119,28 +119,19 @@ err:
 static int universal_pidff_input_configured(struct hid_device *hdev,
 					    struct hid_input *hidinput)
 {
-	int axis;
 	struct input_dev *input = hidinput->input;
 
 	if (!input->absinfo)
 		return 0;
 
-	/* Decrease fuzz and deadzone on available axes */
-	for (axis = ABS_X; axis <= ABS_BRAKE; axis++) {
+	/* Remove fuzz and deadzone from available axes */
+	for (int axis = ABS_X; axis <= ABS_BRAKE; axis++) {
 		if (!test_bit(axis, input->absbit))
 			continue;
 
 		input_set_abs_params(input, axis, input->absinfo[axis].minimum,
-				     input->absinfo[axis].maximum,
-				     axis == ABS_X ? 0 : 8, 0);
+				     input->absinfo[axis].maximum, 0, 0);
 	}
-
-	/* Remove fuzz and deadzone from the second joystick axis */
-	if (hdev->vendor == USB_VENDOR_ID_FFBEAST &&
-	    hdev->product == USB_DEVICE_ID_FFBEAST_JOYSTICK)
-		input_set_abs_params(input, ABS_Y,
-				     input->absinfo[ABS_Y].minimum,
-				     input->absinfo[ABS_Y].maximum, 0, 0);
 
 	return 0;
 }
