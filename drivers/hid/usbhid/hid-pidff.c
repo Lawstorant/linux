@@ -1179,31 +1179,26 @@ static void pidff_set_gain(struct input_dev *dev, u16 gain)
 
 static void pidff_autocenter(struct pidff_device *pidff, u16 magnitude)
 {
-	struct hid_field *field =
-		pidff->block_load[PID_EFFECT_BLOCK_INDEX].field;
+	struct hid_field *bl = pidff->block_load[PID_EFFECT_BLOCK_INDEX].field;
+	struct pidff_usage *se = pidff->set_effect;
+	bool play = magnitude > 0;
 
-	if (!magnitude) {
-		pidff_playback_pid(pidff, field->logical_minimum, 0, false);
+	pidff_playback_pid(pidff, bl->logical_minimum, play, false);
+	if (!play)
 		return;
-	}
 
-	pidff_playback_pid(pidff, field->logical_minimum, 1, false);
+	pidff_set(&se[PID_EFFECT_BLOCK_INDEX], bl->logical_minimum);
+	pidff_set_effect_type(pidff, NULL, PID_SPRING);
 
-	pidff->set_effect[PID_EFFECT_BLOCK_INDEX].value[0] =
-		pidff->block_load[PID_EFFECT_BLOCK_INDEX].field->logical_minimum;
-	pidff->set_effect_type.field->value[0] = pidff->type_id[PID_SPRING];
-	pidff->set_effect[PID_DURATION].value[0] = 0;
-	pidff->set_effect[PID_TRIGGER_BUTTON].value[0] = 0;
-	pidff->set_effect[PID_TRIGGER_REPEAT_INT].value[0] = 0;
-	pidff_set_scaled(&pidff->set_effect[PID_GAIN], magnitude);
-	pidff->set_effect[PID_DIRECTION_ENABLE].value[0] = 1;
+	pidff_set(&se[PID_DURATION], 0);
+	pidff_set(&se[PID_TRIGGER_BUTTON], 0);
+	pidff_set(&se[PID_TRIGGER_REPEAT_INT], 0);
+	pidff_set_scaled(&se[PID_GAIN], magnitude);
+	pidff_set(&se[PID_DIRECTION_ENABLE], 1);
 
-	/* Omit setting delay field if it's missing */
-	if (!(pidff->quirks & HID_PIDFF_QUIRK_MISSING_DELAY))
-		pidff->set_effect[PID_START_DELAY].value[0] = 0;
+	PIDFF_SET_IF_EXISTS(DELAY, pidff_set, &se[PID_START_DELAY], 0);
 
-	hid_hw_request(pidff->hid, pidff->reports[PID_SET_EFFECT],
-		       HID_REQ_SET_REPORT);
+	pidff_hw_set(pidff, PID_SET_EFFECT, false);
 }
 
 /*
