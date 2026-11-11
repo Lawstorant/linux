@@ -249,6 +249,8 @@ struct pidff_device {
 	u8 axis_count;
 };
 
+/* PID helpers */
+
 static bool pidff_is_effect_conditional(struct ff_effect *effect)
 {
 	return effect->type == FF_SPRING  ||
@@ -372,44 +374,167 @@ static u32 pidff_rescale_time(u16 time, struct hid_field *field)
 	return scaled_time;
 }
 
-static void pidff_set(struct pidff_usage *usage, u16 value)
+static bool pidff_check(struct pidff_usage *usage)
 {
-	usage->value[0] = pidff_rescale(value, U16_MAX, usage->field);
-	pr_debug("calculated from %d to %d\n", value, usage->value[0]);
+	if (usage->field && usage->value)
+		return true;
+
+	return false;
+}
+
+/*
+ * Check if field is set and raise kernel error if it's not
+ */
+static bool pidff_check_err(struct pidff_usage *usage)
+{
+	bool ok = pidff_check(usage);
+
+	if (!ok)
+		pr_err("%s: usage invalid!\n", __func__);
+
+	return ok;
+}
+
+static s32 pidff_get(struct pidff_usage *usage)
+{
+	return *usage->value;
+}
+
+/*
+ * Get the value from pidff_usage. Returns @fallback if it's not available
+ */
+static s32 pidff_get_safe(struct pidff_usage *usage, s32 fallback)
+{
+	if (!pidff_check(usage))
+		return fallback;
+
+	return pidff_get(usage);
+}
+
+static void pidff_set_arr(struct pidff_usage *usage, uint index, s32 value)
+{
+	if (pidff_check_err(usage))
+		usage->value[index] = value;
+}
+
+static void pidff_set(struct pidff_usage *usage, s32 value)
+{
+	pidff_set_arr(usage, 0, value);
+}
+
+static void pidff_copy(struct pidff_usage *source, struct pidff_usage *target)
+{
+	pidff_set(target, pidff_get(source));
+}
+
+static void pidff_set_clamped(struct pidff_usage *usage, s32 value)
+{
+	pidff_set(usage, pidff_clamp(value, usage->field));
+}
+
+/*
+ * Set value if it's in logical range, otherwise set to 0
+ */
+static void pidff_set_valid(struct pidff_usage *usage, s32 value)
+{
+	if (value < usage->field->logical_minimum ||
+	    value > usage->field->logical_maximum) {
+		pidff_set(usage, 0);
+		return;
+	}
+
+	pidff_set(usage, value);
+}
+
+/*
+ * Set value to the field's logical_maximum
+ */
+static void pidff_set_max(struct pidff_usage *usage)
+{
+	pidff_set(usage, usage->field->logical_maximum);
+}
+
+/*
+ * Set value with max scaled to the field logical range
+ */
+static void pidff_set_scaled2(struct pidff_usage *usage, u16 value, u16 max)
+{
+	pidff_set(usage, pidff_rescale(value, max, usage->field));
+	pr_debug("scaled from %d to %d\n", value, pidff_get(usage));
+}
+
+/*
+ * Set value with max = U16_MAX scaled to the field logical range
+ */
+static void pidff_set_scaled(struct pidff_usage *usage, u16 value)
+{
+	pidff_set_scaled2(usage, value, U16_MAX);
 }
 
 static void pidff_set_signed(struct pidff_usage *usage, s16 value)
 {
-	if (usage->field->logical_minimum < 0)
-		usage->value[0] = pidff_rescale_signed(value, usage->field);
+	struct hid_field *fld = usage->field;
+	int result = 0;
+
+	if (fld->logical_minimum < 0)
+		result = pidff_rescale_signed(value, fld);
 	else {
 		if (value < 0)
-			usage->value[0] =
-				pidff_rescale(-value, -S16_MIN, usage->field);
+			result = pidff_rescale(-value, -S16_MIN, fld);
 		else
-			usage->value[0] =
-				pidff_rescale(value, S16_MAX, usage->field);
+			result = pidff_rescale(value, S16_MAX, fld);
 	}
-	pr_debug("calculated from %d to %d\n", value, usage->value[0]);
+
+	pidff_set(usage, result);
+	pr_debug("calculated from %d to %d\n", value, result);
 }
 
 static void pidff_set_time(struct pidff_usage *usage, u16 time)
 {
-	usage->value[0] = pidff_clamp(pidff_rescale_time(time, usage->field),
-				      usage->field);
+	s32 rescaled;
+
+	rescaled = pidff_rescale_time(time, usage->field);
+	rescaled = pidff_clamp(rescaled, usage->field);
+	pidff_set(usage, rescaled);
 }
 
 static void pidff_set_duration(struct pidff_usage *usage, u16 duration)
 {
 	/* PID defines INFINITE as the max possible value for duration field */
 	if (pidff_is_duration_infinite(duration)) {
-		usage->value[0] = -1;
-		if (usage->field->report_size < 32)
-			usage->value[0] = (1U << usage->field->report_size) - 1;
+		uint report_size = usage->field->report_size;
+
+		pidff_set(usage, -1);
+		if (report_size < 32)
+			pidff_set(usage, (1U << report_size) - 1);
+
 		return;
 	}
 
 	pidff_set_time(usage, duration);
+}
+
+/*
+ * Converts ff_effect type to pid type.
+ * Uses fallback (eg PID_SPRING) if effect is NULL
+ */
+static void pidff_set_effect_type(struct pidff_device *pidff,
+				  struct ff_effect *effect, u8 fallback)
+{
+	int type = pidff->type_id[fallback];
+
+	if (effect)
+		type = pidff_get_effect_type_id(pidff, effect);
+
+	pidff_set(&pidff->set_effect_type, type);
+}
+
+/* Copies EFFECT_BLOCK_INDEX from pidfff->block_load to target */
+static void pidff_copy_effect_block_index(struct pidff_device *pidff,
+					  struct pidff_usage *target)
+{
+	pidff_copy(&pidff->block_load[PID_EFFECT_BLOCK_INDEX],
+		   &target[PID_EFFECT_BLOCK_INDEX]);
 }
 
 static void pidff_set_effect_direction(struct pidff_device *pidff,
@@ -590,7 +715,7 @@ static void pidff_set_periodic_report(struct pidff_device *pidff,
 			 effect->u.periodic.magnitude);
 	pidff_set_signed(&pidff->set_periodic[PID_OFFSET],
 			 effect->u.periodic.offset);
-	pidff_set(&pidff->set_periodic[PID_PHASE], effect->u.periodic.phase);
+	pidff_set_scaled(&pidff->set_periodic[PID_PHASE], effect->u.periodic.phase);
 	pidff_set_time(&pidff->set_periodic[PID_PERIOD],
 		       effect->u.periodic.period);
 
@@ -633,7 +758,7 @@ static void pidff_set_condition_report(struct pidff_device *pidff,
 				 effect->u.condition[i].center);
 		pidff_set_signed(&pidff->set_condition[PID_POS_COEFFICIENT],
 				 effect->u.condition[i].right_coeff);
-		pidff_set(&pidff->set_condition[PID_POS_SATURATION],
+		pidff_set_scaled(&pidff->set_condition[PID_POS_SATURATION],
 			  effect->u.condition[i].right_saturation);
 
 		/* Omit Negative Coefficient if missing */
@@ -648,7 +773,7 @@ static void pidff_set_condition_report(struct pidff_device *pidff,
 
 		/* Omit Deadband field if missing */
 		if (!(pidff->quirks & HID_PIDFF_QUIRK_MISSING_DEADBAND))
-			pidff_set(&pidff->set_condition[PID_DEADBAND],
+			pidff_set_scaled(&pidff->set_condition[PID_DEADBAND],
 				effect->u.condition[i].deadband);
 
 		hid_hw_request(pidff->hid, pidff->reports[PID_SET_CONDITION],
@@ -712,7 +837,7 @@ static void pidff_set_gain_report(struct pidff_device *pidff, u16 gain)
 	if (!pidff->device_gain[PID_DEVICE_GAIN_FIELD].field)
 		return;
 
-	pidff_set(&pidff->device_gain[PID_DEVICE_GAIN_FIELD], gain);
+	pidff_set_scaled(&pidff->device_gain[PID_DEVICE_GAIN_FIELD], gain);
 	hid_hw_request(pidff->hid, pidff->reports[PID_DEVICE_GAIN],
 		       HID_REQ_SET_REPORT);
 }
@@ -1021,7 +1146,7 @@ static void pidff_autocenter(struct pidff_device *pidff, u16 magnitude)
 	pidff->set_effect[PID_DURATION].value[0] = 0;
 	pidff->set_effect[PID_TRIGGER_BUTTON].value[0] = 0;
 	pidff->set_effect[PID_TRIGGER_REPEAT_INT].value[0] = 0;
-	pidff_set(&pidff->set_effect[PID_GAIN], magnitude);
+	pidff_set_scaled(&pidff->set_effect[PID_GAIN], magnitude);
 	pidff->set_effect[PID_DIRECTION_ENABLE].value[0] = 1;
 
 	/* Omit setting delay field if it's missing */
