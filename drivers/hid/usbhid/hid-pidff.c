@@ -1070,9 +1070,8 @@ static int pidff_playback(struct input_dev *dev, int effect_id, int value)
  */
 static void pidff_erase_pid(struct pidff_device *pidff, int pid_id)
 {
-	pidff->block_free[PID_EFFECT_BLOCK_INDEX].value[0] = pid_id;
-	hid_hw_request(pidff->hid, pidff->reports[PID_BLOCK_FREE],
-		       HID_REQ_SET_REPORT);
+	pidff_set(&pidff->block_free[PID_EFFECT_BLOCK_INDEX], pid_id);
+	pidff_hw_set(pidff, PID_BLOCK_FREE, false);
 }
 
 /*
@@ -1083,8 +1082,11 @@ static int pidff_erase_effect(struct input_dev *dev, int effect_id)
 	struct pidff_device *pidff = dev->ff->private;
 	int pid_id = pidff->effect[effect_id].pid_id;
 
-	hid_dbg(pidff->hid, "starting to erase %d/%d\n", effect_id, pid_id);
+	if (!pidff_get_effect_cnt(pidff))
+		return -EINVAL;
 
+	hid_dbg(pidff->hid, "starting to erase effect[%d] -> PID[%d]\n",
+		effect_id, pid_id);
 	/*
 	 * Wait for the queue to clear. We do not want
 	 * a full fifo to prevent the effect removal.
@@ -1093,10 +1095,7 @@ static int pidff_erase_effect(struct input_dev *dev, int effect_id)
 	pidff_playback_pid(pidff, pid_id, 0, false);
 	pidff_erase_pid(pidff, pid_id);
 
-	if (pidff->effect_count > 0)
-		pidff->effect_count--;
-
-	hid_dbg(pidff->hid, "current effect count: %d", pidff->effect_count);
+	pidff_dec_effect_cnt(pidff);
 	return 0;
 }
 
