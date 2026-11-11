@@ -851,17 +851,15 @@ static void pidff_reset(struct pidff_device *pidff)
  */
 static void pidff_fetch_pool(struct pidff_device *pidff)
 {
-	struct hid_device *hid = pidff->hid;
 	struct pidff_usage *psm = &pidff->pool[PID_SIMULTANEOUS_MAX];
 
 	/* Repeat if PID_SIMULTANEOUS_MAX < 2 to make sure it's correct */
 	for (int i = 0; i < PIDFF_FETCH_POOL_RETRIES; i++) {
 		pidff_hw_get(pidff, PID_POOL, true);
-
-		if (!psm->value || pidff_get(&psm) >= 2)
+		if (pidff_get_safe(psm, 0) >= 2)
 			return;
 	}
-	hid_warn(hid, "device reports %d simultaneous effects\n",
+	hid_warn(pidff->hid, "device reports %d simultaneous effects\n",
 		 pidff_get(&psm));
 }
 
