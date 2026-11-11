@@ -249,6 +249,12 @@ struct pidff_device {
 	u8 axis_count;
 };
 
+/* Set HID_PIDFF_QUIRK_@quirk */
+#define PIDFF_SET_QUIRK(quirk) ({ pidff->quirks |= HID_PIDFF_QUIRK_ ## quirk; })
+
+/* Check if HID_PIDFF_QUIRK_@quirk is set */
+#define PIDFF_QUIRK(quirk) (pidff->quirks & HID_PIDFF_QUIRK_ ## quirk)
+
 /* PID helpers */
 
 static bool pidff_is_effect_conditional(struct ff_effect *effect)
@@ -318,8 +324,7 @@ static int pidff_get_effect_type_id(struct pidff_device *pidff,
 	if (id < 0)
 		return 0;
 
-	if (effect->type == FF_PERIODIC &&
-	    pidff->quirks & HID_PIDFF_QUIRK_PERIODIC_SINE_ONLY)
+	if (effect->type == FF_PERIODIC && PIDFF_QUIRK(PERIODIC_SINE_ONLY))
 		id = PID_SINE;
 
 	return pidff->type_id[id];
@@ -373,6 +378,14 @@ static u32 pidff_rescale_time(u16 time, struct hid_field *field)
 	pr_debug("time calculated from %d to %d\n", time, scaled_time);
 	return scaled_time;
 }
+
+/*
+ * Set the value only if HID_PIDFF_QUIRK_MISSING_@quirk is not set,
+ * using the provided @helper function (eg pidff_set).
+ */
+#define PIDFF_SET_IF_EXISTS(quirk, helper, usage, value) \
+	({ if (!PIDFF_QUIRK(MISSING_ ## quirk)) \
+		helper(usage, value); })
 
 static bool pidff_check(struct pidff_usage *usage)
 {
