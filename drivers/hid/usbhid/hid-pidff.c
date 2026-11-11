@@ -17,12 +17,16 @@
 #include <linux/stringify.h>
 #include <linux/usb.h>
 
-#define	PID_EFFECTS_MAX		64
-#define	PID_INFINITE		U16_MAX
+#define PID_EFFECTS_MAX		64
+#define PID_INFINITE		U16_MAX
+#define PID_ATTACK_MAX		S16_MAX
+#define PID_FADE_MAX		PID_ATTACK_MAX
 
 /* Linux Force Feedback API uses miliseconds as time unit */
 #define FF_TIME_EXPONENT	-3
 #define FF_INFINITE		0
+#define FF_ATTACK_MAX		S16_MAX
+#define FF_FADE_MAX		FF_ATTACK_MAX
 
 /* Report usage table used to put reports into an array */
 #define PID_SET_EFFECT		0
@@ -159,6 +163,8 @@ static const u8 pidff_effect_operation_status[] = { 0x79, 0x7b };
 #define PID_DIRECTION_WEST	0xc000
 
 #define PIDFF_FIXED_WHEEL_DIRECTION	PID_DIRECTION_EAST
+#define PIDFF_FETCH_POOL_RETRIES	20
+#define PIDFF_BLOCK_LOAD_RETRIES	60
 
 /* AXES_ENABLE and DIRECTION axes */
 enum pid_axes {
