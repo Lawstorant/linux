@@ -791,43 +791,30 @@ static bool pidff_needs_set_periodic(struct ff_effect *effect,
 static void pidff_set_condition_report(struct pidff_device *pidff,
 				       struct ff_effect *effect)
 {
-	int i, max_axis;
-
 	/* Devices missing Parameter Block Offset can only have one axis */
-	max_axis = pidff->quirks & HID_PIDFF_QUIRK_MISSING_PBO ? 1 : 2;
+	int max_axis = PIDFF_QUIRK(MISSING_PBO) ? 1 : 2;
+	struct pidff_usage *sc = pidff->set_condition;
 
-	pidff->set_condition[PID_EFFECT_BLOCK_INDEX].value[0] =
-		pidff->block_load[PID_EFFECT_BLOCK_INDEX].value[0];
+	pidff_copy_effect_block_index(pidff, sc);
 
-	for (i = 0; i < max_axis; i++) {
-		/* Omit Parameter Block Offset if missing */
-		if (!(pidff->quirks & HID_PIDFF_QUIRK_MISSING_PBO))
-			pidff->set_condition[PID_PARAM_BLOCK_OFFSET].value[0] = i;
+	for (int i = 0; i < max_axis; i++) {
+		struct ff_condition_effect *c = &effect->u.condition[i];
 
-		pidff_set_signed(&pidff->set_condition[PID_CP_OFFSET],
-				 effect->u.condition[i].center);
-		pidff_set_signed(&pidff->set_condition[PID_POS_COEFFICIENT],
-				 effect->u.condition[i].right_coeff);
-		pidff_set_scaled(&pidff->set_condition[PID_POS_SATURATION],
-			  effect->u.condition[i].right_saturation);
+		PIDFF_SET_IF_EXISTS(PBO, pidff_set_signed,
+				    &sc[PID_PARAM_BLOCK_OFFSET], i);
 
-		/* Omit Negative Coefficient if missing */
-		if (!(pidff->quirks & HID_PIDFF_QUIRK_MISSING_NEG_COEFFICIENT))
-			pidff_set_signed(&pidff->set_condition[PID_NEG_COEFFICIENT],
-					effect->u.condition[i].left_coeff);
+		pidff_set_signed(&sc[PID_CP_OFFSET], c->center);
+		pidff_set_signed(&sc[PID_POS_COEFFICIENT], c->right_coeff);
+		pidff_set_scaled(&sc[PID_POS_SATURATION], c->right_saturation);
 
-		/* Omit Negative Saturation if missing */
-		if (!(pidff->quirks & HID_PIDFF_QUIRK_MISSING_NEG_SATURATION))
-			pidff_set_signed(&pidff->set_condition[PID_NEG_SATURATION],
-					effect->u.condition[i].left_saturation);
+		PIDFF_SET_IF_EXISTS(NEG_COEFFICIENT, pidff_set_signed,
+				    &sc[PID_NEG_COEFFICIENT], c->left_coeff);
+		PIDFF_SET_IF_EXISTS(NEG_SATURATION, pidff_set_signed,
+				    &sc[PID_NEG_SATURATION], c->left_saturation);
+		PIDFF_SET_IF_EXISTS(DEADBAND, pidff_set,
+				    &sc[PID_POS_SATURATION], c->deadband);
 
-		/* Omit Deadband field if missing */
-		if (!(pidff->quirks & HID_PIDFF_QUIRK_MISSING_DEADBAND))
-			pidff_set_scaled(&pidff->set_condition[PID_DEADBAND],
-				effect->u.condition[i].deadband);
-
-		hid_hw_request(pidff->hid, pidff->reports[PID_SET_CONDITION],
-			       HID_REQ_SET_REPORT);
+		pidff_hw_set(pidff, PID_SET_CONDITION, false);
 	}
 }
 
@@ -837,21 +824,21 @@ static void pidff_set_condition_report(struct pidff_device *pidff,
 static bool pidff_needs_set_condition(struct ff_effect *effect,
 				      struct ff_effect *old)
 {
-	bool ret = false;
+	bool need = false;
 
 	for (int i = 0; i < 2; i++) {
 		struct ff_condition_effect *cond = &effect->u.condition[i];
 		struct ff_condition_effect *old_cond = &old->u.condition[i];
 
-		ret |= cond->center != old_cond->center ||
-		       cond->right_coeff != old_cond->right_coeff ||
-		       cond->left_coeff != old_cond->left_coeff ||
-		       cond->right_saturation != old_cond->right_saturation ||
-		       cond->left_saturation != old_cond->left_saturation ||
-		       cond->deadband != old_cond->deadband;
+		need |= cond->center != old_cond->center ||
+			cond->deadband != old_cond->deadband ||
+			cond->left_coeff != old_cond->left_coeff ||
+			cond->right_coeff != old_cond->right_coeff ||
+			cond->left_saturation != old_cond->left_saturation ||
+			cond->right_saturation != old_cond->right_saturation;
 	}
 
-	return ret;
+	return need;
 }
 
 /*
