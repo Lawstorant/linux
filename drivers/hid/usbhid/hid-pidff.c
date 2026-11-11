@@ -656,25 +656,18 @@ static void pidff_set_effect_direction(struct pidff_device *pidff,
 static void pidff_set_envelope_report(struct pidff_device *pidff,
 				      struct ff_envelope *envelope)
 {
-	pidff->set_envelope[PID_EFFECT_BLOCK_INDEX].value[0] =
-		pidff->block_load[PID_EFFECT_BLOCK_INDEX].value[0];
+	struct pidff_usage *se = pidff->set_envelope;
+	u16 attack_level = umin(envelope->attack_level, FF_ATTACK_MAX);
+	u16 fade_level = umin(envelope->fade_level, FF_FADE_MAX);
 
-	pidff->set_envelope[PID_ATTACK_LEVEL].value[0] =
-		pidff_rescale(envelope->attack_level >
-			S16_MAX ? S16_MAX : envelope->attack_level, S16_MAX,
-			pidff->set_envelope[PID_ATTACK_LEVEL].field);
-	pidff->set_envelope[PID_FADE_LEVEL].value[0] =
-		pidff_rescale(envelope->fade_level >
-			S16_MAX ? S16_MAX : envelope->fade_level, S16_MAX,
-			pidff->set_envelope[PID_FADE_LEVEL].field);
+	pidff_copy_effect_block_index(pidff, se);
 
-	pidff_set_time(&pidff->set_envelope[PID_ATTACK_TIME],
-		       envelope->attack_length);
-	pidff_set_time(&pidff->set_envelope[PID_FADE_TIME],
-		       envelope->fade_length);
+	pidff_set_scaled2(&se[PID_ATTACK_LEVEL], attack_level, PID_ATTACK_MAX);
+	pidff_set_scaled2(&se[PID_FADE_LEVEL], fade_level, PID_FADE_MAX);
+	pidff_set_time(&se[PID_ATTACK_TIME], envelope->attack_length);
+	pidff_set_time(&se[PID_FADE_TIME], envelope->fade_length);
 
-	hid_hw_request(pidff->hid, pidff->reports[PID_SET_ENVELOPE],
-		       HID_REQ_SET_REPORT);
+	pidff_hw_set(pidff, PID_SET_ENVELOPE, false);
 }
 
 /*
