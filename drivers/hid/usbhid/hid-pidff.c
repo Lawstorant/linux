@@ -946,50 +946,66 @@ static void pidff_fetch_pool(struct pidff_device *pidff)
 }
 
 /*
+ * Request BLOCK_LOAD and return status.
+
+ * Returns 0 if device reported success, -ENOSPC if the device
+ * reported memory is full.
+ *
+ * Returns -EIO for unknown response.
+ */
+static int pidff_request_block_load(struct pidff_device *pidff)
+{
+	struct pidff_usage *bl = pidff->block_load;
+	s32 status;
+
+	pidff_hw_get(pidff, PID_BLOCK_LOAD, true);
+	status = pidff_get(&pidff->block_load_status);
+
+	if (status == pidff->status_id[PID_BLOCK_LOAD_SUCCESS]) {
+		hid_dbg(pidff->hid, "device reported free memory: %d bytes\n",
+			pidff_get_safe(&bl[PID_RAM_POOL_AVAILABLE], -1));
+		return 0;
+	}
+
+	if (status == pidff->status_id[PID_BLOCK_LOAD_FULL]) {
+		hid_dbg(pidff->hid, "not enough memory, free: %d bytes\n",
+			pidff_get_safe(&bl[PID_RAM_POOL_AVAILABLE], -1));
+		return -ENOSPC;
+	}
+
+	if (status == pidff->status_id[PID_BLOCK_LOAD_ERROR]) {
+		hid_dbg(pidff->hid, "device error during effect creation\n");
+		return -EREMOTEIO;
+	}
+
+	return -EIO;
+}
+
+/*
  * Send a request for effect upload to the device
+ * Returns status from pidff_request_block_load()
  *
- * Reset and enable actuators if no effects were present on the device
- *
- * Returns 0 if device reported success, -ENOSPC if the device reported memory
- * is full. Upon unknown response the function will retry for
- * PIDFF_BLOCK_LOAD_RETRIES times. If still unsuccessful -EIO is returned.
+ * Upon unknown response the function will retry for PIDFF_BLOCK_LOAD_RETRIES
+ * times. If still unsuccessful -EIO is returned.
  */
 static int pidff_request_effect_upload(struct pidff_device *pidff, int efnum)
 {
-	struct pidff_usage *bl = pidff->block_load;
-	s32 status = 0;
-
 	pidff_set(&pidff->create_new_effect_type, efnum);
 	pidff_hw_set(pidff, PID_CREATE_NEW_EFFECT, false);
 	hid_dbg(pidff->hid, "create_new_effect sent, type: %d\n", efnum);
 
-	pidff_set(&bl[PID_EFFECT_BLOCK_INDEX], 0);
+	pidff_set(&pidff->block_load[PID_EFFECT_BLOCK_INDEX], 0);
 	pidff_set(&pidff->block_load_status, 0);
 	hid_hw_wait(pidff->hid);
 
 	for (int i = 0; i < PIDFF_BLOCK_LOAD_RETRIES; i++) {
-		hid_dbg(pidff->hid, "pid_block_load requested %d/%u\n", i + 1,
+		hid_dbg(pidff->hid, "pid_block_load request: %d/%u\n", i + 1,
 			PIDFF_BLOCK_LOAD_RETRIES);
 
-		pidff_hw_get(pidff, PID_BLOCK_LOAD, true);
-		status = pidff_get(&pidff->block_load_status);
+		s32 status = pidff_request_block_load(pidff);
 
-		if (status == pidff->status_id[PID_BLOCK_LOAD_SUCCESS]) {
-			hid_dbg(pidff->hid, "device reported free memory: %d bytes\n",
-				pidff_get_safe(&bl[PID_RAM_POOL_AVAILABLE], -1));
-			return 0;
-		}
-
-		if (status == pidff->status_id[PID_BLOCK_LOAD_FULL]) {
-			hid_dbg(pidff->hid, "not enough memory, free: %d bytes\n",
-				pidff_get_safe(&bl[PID_RAM_POOL_AVAILABLE], -1));
-			return -ENOSPC;
-		}
-
-		if (status == pidff->status_id[PID_BLOCK_LOAD_ERROR]) {
-			hid_dbg(pidff->hid, "device error during effect creation\n");
-			return -EREMOTEIO;
-		}
+		if (status != -EIO)
+			return status;
 	}
 
 	hid_err(pidff->hid, "pid_block_load failed %u times\n", PIDFF_BLOCK_LOAD_RETRIES);
