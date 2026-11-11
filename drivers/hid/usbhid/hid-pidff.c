@@ -1201,46 +1201,51 @@ static int pidff_check_usage(int usage)
 	return -1;
 }
 
+static bool pidff_set_report(struct pidff_device *pidff, struct hid_report *rep,
+			    int usage, bool collection)
+{
+	int i = pidff_check_usage(usage);
+
+	if (i < 0 || (collection && pidff->reports[i]))
+		return false;
+
+	pidff->reports[i] = rep;
+	hid_dbg(pidff->hid, "found usage 0x%02x from %s\n", pidff_reports[i],
+		collection ? "collection array" : "field->logical");
+	return true;
+}
+
 /*
  * Find the reports and fill pidff->reports[]
  * report_type specifies either OUTPUT or FEATURE reports
  */
-static void pidff_find_reports(struct hid_device *hid, int report_type,
-			       struct pidff_device *pidff)
+static void pidff_find_reports(int report_type, struct pidff_device *pidff)
 {
+	struct hid_device *hid = pidff->hid;
+	struct list_head *head = &hid->report_enum[report_type].report_list;
 	struct hid_report *report;
-	int i, ret;
+	int i;
 
-	list_for_each_entry(report,
-			    &hid->report_enum[report_type].report_list, list) {
+	list_for_each_entry(report, head, list) {
 		if (report->maxfield < 1)
 			continue;
-		ret = pidff_check_usage(report->field[0]->logical);
-		if (ret != -1) {
-			hid_dbg(hid, "found usage 0x%02x from field->logical\n",
-				pidff_reports[ret]);
-			pidff->reports[ret] = report;
-			continue;
-		}
 
+		struct hid_field *fld = &report->field[0];
+
+		if (pidff_set_report(pidff, report, fld->logical, false))
+			continue;
 		/*
 		 * Sometimes logical collections are stacked to indicate
 		 * different usages for the report and the field, in which
 		 * case we want the usage of the parent. However, Linux HID
 		 * implementation hides this fact, so we have to dig it up
-		 * ourselves
+		 * ourselves. 1-based index
 		 */
-		i = report->field[0]->usage[0].collection_index;
-		if (i <= 0 ||
-		    hid->collection[i - 1].type != HID_COLLECTION_LOGICAL)
+		i = fld->usage[0].collection_index - 1;
+		if (i < 0 || hid->collection[i].type != HID_COLLECTION_LOGICAL)
 			continue;
-		ret = pidff_check_usage(hid->collection[i - 1].usage);
-		if (ret != -1 && !pidff->reports[ret]) {
-			hid_dbg(hid,
-				"found usage 0x%02x from collection array\n",
-				pidff_reports[ret]);
-			pidff->reports[ret] = report;
-		}
+
+		pidff_set_report(pidff, report, hid->collection[i].usage, true);
 	}
 }
 
@@ -1633,8 +1638,8 @@ int hid_pidff_init_with_quirks(struct hid_device *hid, u32 initial_quirks)
 
 	hid_device_io_start(hid);
 
-	pidff_find_reports(hid, HID_OUTPUT_REPORT, pidff);
-	pidff_find_reports(hid, HID_FEATURE_REPORT, pidff);
+	pidff_find_reports(HID_OUTPUT_REPORT, pidff);
+	pidff_find_reports(HID_FEATURE_REPORT, pidff);
 
 	if (!pidff_reports_ok(pidff)) {
 		hid_err(hid, "reports not ok, aborting\n");
