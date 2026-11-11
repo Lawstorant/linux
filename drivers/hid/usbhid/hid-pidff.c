@@ -792,7 +792,7 @@ static bool pidff_needs_set_ramp(struct ff_effect *effect, struct ff_effect *old
  */
 static void pidff_set_gain_report(struct pidff_device *pidff, u16 gain)
 {
-	if (!pidff->device_gain[PID_DEVICE_GAIN_FIELD].field)
+	if (!pidff_check(&pidff->device_gain[PID_DEVICE_GAIN_FIELD]))
 		return;
 
 	pidff_set_scaled(&pidff->device_gain[PID_DEVICE_GAIN_FIELD], gain);
