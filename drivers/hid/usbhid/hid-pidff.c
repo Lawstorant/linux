@@ -251,6 +251,45 @@ struct pidff_device {
 	u8 axis_count;
 };
 
+/* Effect helpers */
+static uint pidff_get_effect_cnt(struct pidff_device *pidff)
+{
+	return pidff->effect_count;
+}
+
+static bool pidff_change_effect_cnt(struct pidff_device *pidff, bool increase)
+{
+	if (increase && pidff_get_effect_cnt(pidff) < pidff->max_effects)
+		pidff->effect_count++;
+
+	else if (pidff_get_effect_cnt(pidff))
+		pidff->effect_count--;
+
+	else {
+		hid_dbg(pidff->hid, "can't adjust effect_count!\n");
+		return false;
+	}
+
+	hid_dbg(pidff->hid, "current effect count: %u\n", pidff->effect_count);
+	return true;
+}
+
+static bool pidff_inc_effect_cnt(struct pidff_device *pidff)
+{
+	return pidff_change_effect_cnt(pidff, true);
+}
+
+static bool pidff_dec_effect_cnt(struct pidff_device *pidff)
+{
+	return pidff_change_effect_cnt(pidff, false);
+}
+
+static void pidff_reset_effect_cnt(struct pidff_device *pidff)
+{
+	pidff->effect_count = 0;
+	hid_dbg(pidff->hid, "effect count reset back to 0\n");
+}
+
 /* HID helpers */
 static void pidff_hw_request(struct pidff_device *pidff, u8 report, bool wait,
 			     enum hid_class_request request)
