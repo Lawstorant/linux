@@ -410,7 +410,7 @@ static void pidff_set_effect_direction(struct pidff_device *pidff,
 	int direction_enable = 1;
 
 	/* Use fixed direction if needed */
-	if (pidff->quirks & HID_PIDFF_QUIRK_FIX_CONDITIONAL_DIRECTION &&
+	if (pidff->quirks & HID_PIDFF_QUIRK_FIX_CONDITIONAL_DIR &&
 	    pidff_is_effect_conditional(effect))
 		direction = PIDFF_FIXED_WHEEL_DIRECTION;
 
