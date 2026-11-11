@@ -1688,8 +1688,6 @@ static int pidff_init_fields(struct pidff_device *pidff, struct input_dev *dev)
 static int pidff_check_autocenter(struct pidff_device *pidff,
 				  struct input_dev *dev)
 {
-	int error;
-
 	/*
 	 * Let's find out if autocenter modification is supported
 	 * Specification doesn't specify anything, so we request an
@@ -1698,23 +1696,25 @@ static int pidff_check_autocenter(struct pidff_device *pidff,
 	 * effect id is a built-in spring type effect used for autocenter
 	 */
 
-	error = pidff_request_effect_upload(pidff, 1);
+	int error = pidff_request_effect_upload(pidff, 1);
+
 	if (error) {
 		hid_err(pidff->hid, "upload request failed\n");
 		return error;
 	}
 
-	if (pidff->block_load[PID_EFFECT_BLOCK_INDEX].value[0] ==
-	    pidff->block_load[PID_EFFECT_BLOCK_INDEX].field->logical_minimum + 1) {
+	struct pidff_usage *bl_ebi = &pidff->block_load[PID_EFFECT_BLOCK_INDEX];
+	s32 effect_index = pidff_get(bl_ebi);
+
+	if (effect_index == bl_ebi->field->logical_minimum + 1) {
 		pidff_autocenter(pidff, U16_MAX);
 		set_bit(FF_AUTOCENTER, dev->ffbit);
 	} else {
 		hid_notice(pidff->hid,
 			   "device has unknown autocenter control method\n");
 	}
-	pidff_erase_pid(pidff,
-			pidff->block_load[PID_EFFECT_BLOCK_INDEX].value[0]);
 
+	pidff_erase_pid(pidff, effect_index);
 	return 0;
 }
 
