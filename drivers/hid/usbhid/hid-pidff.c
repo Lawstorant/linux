@@ -700,13 +700,11 @@ static bool pidff_needs_set_envelope(struct ff_envelope *envelope,
 static void pidff_set_constant_report(struct pidff_device *pidff,
 				      struct ff_effect *effect)
 {
-	pidff->set_constant[PID_EFFECT_BLOCK_INDEX].value[0] =
-		pidff->block_load[PID_EFFECT_BLOCK_INDEX].value[0];
-	pidff_set_signed(&pidff->set_constant[PID_MAGNITUDE],
-			 effect->u.constant.level);
+	struct pidff_usage *sc = pidff->set_constant;
 
-	hid_hw_request(pidff->hid, pidff->reports[PID_SET_CONSTANT],
-		       HID_REQ_SET_REPORT);
+	pidff_copy_effect_block_index(pidff, sc);
+	pidff_set_signed(&sc[PID_MAGNITUDE], effect->u.constant.level);
+	pidff_hw_set(pidff, PID_SET_CONSTANT, false);
 }
 
 /*
