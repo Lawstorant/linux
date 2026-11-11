@@ -1751,7 +1751,7 @@ int hid_pidff_init_with_quirks(struct hid_device *hid, u32 initial_quirks)
 
 	pidff->hid = hid;
 	pidff->quirks = initial_quirks;
-	pidff->effect_count = 0;
+	pidff_reset_effect_cnt(pidff);
 
 	hid_device_io_start(hid);
 
@@ -1782,19 +1782,15 @@ int hid_pidff_init_with_quirks(struct hid_device *hid, u32 initial_quirks)
 
 	pidff->max_effects = umin(pidff->max_effects, PID_EFFECTS_MAX);
 
-	if (pidff->pool[PID_SIMULTANEOUS_MAX].value)
-		hid_dbg(hid, "max simultaneous effects is %d\n",
-			pidff->pool[PID_SIMULTANEOUS_MAX].value[0]);
+	hid_dbg(hid, "max effects is %d\n", pidff->max_effects);
+	hid_dbg(hid, "max simultaneous effects is %d\n",
+		pidff_get_safe(&pidff->pool[PID_SIMULTANEOUS_MAX], -1));
+	hid_dbg(hid, "device memory size is %d bytes\n",
+		pidff_get_safe(&pidff->pool[PID_RAM_POOL_SIZE], -1));
 
-	if (pidff->pool[PID_RAM_POOL_SIZE].value)
-		hid_dbg(hid, "device memory size is %d bytes\n",
-			pidff->pool[PID_RAM_POOL_SIZE].value[0]);
-
-	if (pidff->pool[PID_DEVICE_MANAGED_POOL].value &&
-	    pidff->pool[PID_DEVICE_MANAGED_POOL].value[0] == 0) {
+	if (!pidff_get_safe(&pidff->pool[PID_DEVICE_MANAGED_POOL], 0)) {
 		error = -EPERM;
-		hid_notice(hid,
-			   "device does not support device managed pool\n");
+		hid_notice(hid, "device does not support device managed pool\n");
 		goto fail;
 	}
 
@@ -1826,9 +1822,9 @@ fail:
 EXPORT_SYMBOL_GPL(hid_pidff_init_with_quirks);
 
 /*
- * Check if the device is PID and initialize it
- * Wrapper made to keep the compatibility with old
- * init function
+ * Check if the device is PID and initialize it.
+ * Wrapper made to keepcompatibility with the old
+ * init function.
  */
 int hid_pidff_init(struct hid_device *hid)
 {
