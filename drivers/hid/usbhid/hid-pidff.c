@@ -1012,6 +1012,10 @@ static int pidff_request_effect_upload(struct pidff_device *pidff, int efnum)
 	return -EIO;
 }
 
+/*
+ * Effect needs playback if it's not infinite or if loop_count for an infinite
+ * effect has changed (may be going from n -> 0)
+ */
 static bool pidff_needs_playback(struct pidff_device *pidff, int effect_id, int n)
 {
 	return !pidff->effect[effect_id].is_infinite ||
@@ -1019,27 +1023,18 @@ static bool pidff_needs_playback(struct pidff_device *pidff, int effect_id, int 
 }
 
 /*
- * Play the effect with PID id n times
+ * Play the effect with @pid_id @n times
  */
 static void pidff_playback_pid(struct pidff_device *pidff, int pid_id, int n)
 {
-	pidff->effect_operation[PID_EFFECT_BLOCK_INDEX].value[0] = pid_id;
+	const u8 op = n ? PID_EFFECT_START : PID_EFFECT_STOP;
 
-	hid_dbg(pidff->hid, "%s PID effect %d", n == 0 ? "stopping" : "playing",
-		pid_id);
+	pidff_set(&pidff->effect_operation[PID_EFFECT_BLOCK_INDEX], pid_id);
+	pidff_set(&pidff->effect_operation_status, pidff->operation_id[op]);
+	pidff_set_clamped(&pidff->effect_operation[PID_LOOP_COUNT], n);
 
-	if (n == 0) {
-		pidff->effect_operation_status.field->value[0] =
-			pidff->operation_id[PID_EFFECT_STOP];
-	} else {
-		pidff->effect_operation_status.field->value[0] =
-			pidff->operation_id[PID_EFFECT_START];
-		pidff->effect_operation[PID_LOOP_COUNT].value[0] =
-			pidff_clamp(n, pidff->effect_operation[PID_LOOP_COUNT].field);
-	}
-
-	hid_hw_request(pidff->hid, pidff->reports[PID_EFFECT_OPERATION],
-		       HID_REQ_SET_REPORT);
+	pidff_hw_set(pidff, PID_EFFECT_OPERATION, false);
+	hid_dbg(pidff->hid, "%s PID effect %d", n ? "play" : "stop", pid_id);
 }
 
 /*
@@ -1048,6 +1043,7 @@ static void pidff_playback_pid(struct pidff_device *pidff, int pid_id, int n)
 static int pidff_playback(struct input_dev *dev, int effect_id, int value)
 {
 	struct pidff_device *pidff = dev->ff->private;
+	struct pidff_effect *effect = &pidff->effect[effect_id];
 
 	if (!pidff_needs_playback(pidff, effect_id, value))
 		return 0;
@@ -1055,8 +1051,8 @@ static int pidff_playback(struct input_dev *dev, int effect_id, int value)
 	hid_dbg(pidff->hid, "requesting %s on FF effect %d",
 		value == 0 ? "stop" : "playback", effect_id);
 
-	pidff->effect[effect_id].loop_count = value;
-	pidff_playback_pid(pidff, pidff->effect[effect_id].pid_id, value);
+	effect->loop_count = value;
+	pidff_playback_pid(pidff, effect->pid_id, value);
 	return 0;
 }
 
