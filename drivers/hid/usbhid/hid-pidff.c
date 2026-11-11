@@ -847,14 +847,13 @@ static bool pidff_needs_set_condition(struct ff_effect *effect,
 static void pidff_set_ramp_report(struct pidff_device *pidff,
 				  struct ff_effect *effect)
 {
-	pidff->set_ramp[PID_EFFECT_BLOCK_INDEX].value[0] =
-		pidff->block_load[PID_EFFECT_BLOCK_INDEX].value[0];
-	pidff_set_signed(&pidff->set_ramp[PID_RAMP_START],
-			 effect->u.ramp.start_level);
-	pidff_set_signed(&pidff->set_ramp[PID_RAMP_END],
-			 effect->u.ramp.end_level);
-	hid_hw_request(pidff->hid, pidff->reports[PID_SET_RAMP],
-		       HID_REQ_SET_REPORT);
+	struct pidff_usage *sr = pidff->set_ramp;
+
+	pidff_copy_effect_block_index(pidff, sr);
+	pidff_set_signed(&sr[PID_RAMP_START], effect->u.ramp.start_level);
+	pidff_set_signed(&sr[PID_RAMP_END], effect->u.ramp.end_level);
+
+	pidff_hw_set(pidff, PID_SET_RAMP, false);
 }
 
 /*
@@ -863,7 +862,7 @@ static void pidff_set_ramp_report(struct pidff_device *pidff,
 static bool pidff_needs_set_ramp(struct ff_effect *effect, struct ff_effect *old)
 {
 	return effect->u.ramp.start_level != old->u.ramp.start_level ||
-	       effect->u.ramp.end_level != old->u.ramp.end_level;
+	       effect->u.ramp.end_level   != old->u.ramp.end_level;
 }
 
 /*
@@ -871,12 +870,11 @@ static bool pidff_needs_set_ramp(struct ff_effect *effect, struct ff_effect *old
  */
 static void pidff_set_gain_report(struct pidff_device *pidff, u16 gain)
 {
-	if (!pidff->device_gain[PID_DEVICE_GAIN_FIELD].field)
+	if (!pidff_check(&pidff->device_gain[PID_DEVICE_GAIN_FIELD]))
 		return;
 
 	pidff_set_scaled(&pidff->device_gain[PID_DEVICE_GAIN_FIELD], gain);
-	hid_hw_request(pidff->hid, pidff->reports[PID_DEVICE_GAIN],
-		       HID_REQ_SET_REPORT);
+	pidff_hw_set(pidff, PID_DEVICE_GAIN, false);
 }
 
 /*
