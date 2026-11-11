@@ -247,6 +247,7 @@ struct pidff_device {
 
 	u32 quirks;
 	u8 effect_count;
+	u8 max_effects;
 	u8 axis_count;
 };
 
@@ -1610,7 +1611,6 @@ int hid_pidff_init_with_quirks(struct hid_device *hid, u32 initial_quirks)
 	struct hid_input *hidinput;
 	struct input_dev *dev;
 	struct ff_device *ff;
-	int max_effects;
 	int error;
 
 	if (list_empty(&hid->inputs)) {
@@ -1658,12 +1658,14 @@ int hid_pidff_init_with_quirks(struct hid_device *hid, u32 initial_quirks)
 	if (error)
 		goto fail;
 
-	max_effects =
+	pidff->max_effects =
 	    pidff->block_load[PID_EFFECT_BLOCK_INDEX].field->logical_maximum -
 	    pidff->block_load[PID_EFFECT_BLOCK_INDEX].field->logical_minimum +
 	    1;
 
-	hid_dbg(hid, "max effects is %d\n", max_effects);
+	pidff->max_effects = MAX(pidff->max_effects, PID_EFFECTS_MAX);
+
+	hid_dbg(hid, "max effects is %d\n", pidff->max_effects);
 	hid_dbg(hid, "max simultaneous effects is %d\n",
 		pidff_get_safe(&pidff->pool[PID_SIMULTANEOUS_MAX], -1));
 	hid_dbg(hid, "device memory size is %d bytes\n",
@@ -1675,7 +1677,7 @@ int hid_pidff_init_with_quirks(struct hid_device *hid, u32 initial_quirks)
 		goto fail;
 	}
 
-	error = input_ff_create(dev, MAX(max_effects, PID_EFFECTS_MAX));
+	error = input_ff_create(dev, pidff->max_effects);
 	if (error)
 		goto fail;
 
