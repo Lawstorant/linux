@@ -223,21 +223,21 @@ struct pidff_device {
 	struct pidff_effect effect[PID_EFFECTS_MAX];
 
 	/* Special field in create_new_effect */
-	struct pidff_usage *create_new_effect_type;
+	struct pidff_usage create_new_effect_type;
 
 	/* Special fields in set_effect */
-	struct pidff_usage *set_effect_type;
-	struct pidff_usage *effect_direction;
-	struct pidff_usage *axes_enable;
+	struct pidff_usage set_effect_type;
+	struct pidff_usage effect_direction;
+	struct pidff_usage axes_enable;
 
 	/* Special field in device_control */
-	struct pidff_usage *device_control;
+	struct pidff_usage device_control;
 
 	/* Special field in block_load */
-	struct pidff_usage *block_load_status;
+	struct pidff_usage block_load_status;
 
 	/* Special field in effect_operation */
-	struct pidff_usage *effect_operation_status;
+	struct pidff_usage effect_operation_status;
 
 	int control_id[ARRAY_SIZE(pidff_device_control)];
 	int type_id[ARRAY_SIZE(pidff_effect_types)];
@@ -250,6 +250,9 @@ struct pidff_device {
 	u8 max_effects;
 	u8 axis_count;
 };
+
+#define PIDFF_SET_QUIRK(quirk) pidff->quirks |= HID_PIDFF_QUIRK_ ## quirk
+#define PIDFF_QUIRK(quirk) (pidff->quirks & HID_PIDFF_QUIRK_ ## quirk)
 
 /* Effect helpers */
 static uint pidff_get_effect_cnt(struct pidff_device *pidff)
@@ -270,7 +273,8 @@ static bool pidff_change_effect_cnt(struct pidff_device *pidff, bool increase)
 		return false;
 	}
 
-	hid_dbg(pidff->hid, "current effect count: %u\n", pidff->effect_count);
+	hid_dbg(pidff->hid, "current effect count: %u/%u\n",
+		pidff_get_effect_cnt(pidff), pidff->max_effects);
 	return true;
 }
 
@@ -377,8 +381,7 @@ static int pidff_get_effect_type_id(struct pidff_device *pidff,
 	if (id < 0)
 		return 0;
 
-	if (effect->type == FF_PERIODIC &&
-	    pidff->quirks & HID_PIDFF_QUIRK_PERIODIC_SINE_ONLY)
+	if (effect->type == FF_PERIODIC && PIDFF_QUIRK(PERIODIC_SINE_ONLY))
 		id = PID_SINE;
 
 	return pidff->type_id[id];
@@ -438,7 +441,7 @@ static u32 pidff_rescale_time(u16 time, struct hid_field *field)
  * using the provided helper function (eg pidff_set).
  */
 #define PIDFF_SET_IF_EXISTS(quirk, helper, usage, value) \
-	({ if (!(pidff->quirks & HID_PIDFF_QUIRK_MISSING_##quirk)) \
+	({ if (!PIDFF_QUIRK(MISSING_ ## quirk)) \
 		helper(usage, value); })
 
 static bool pidff_check(struct pidff_usage *usage)
@@ -446,8 +449,17 @@ static bool pidff_check(struct pidff_usage *usage)
 	if (usage->field && usage->value)
 		return true;
 
-	pr_err("%s: usage invalid\n", __func__);
 	return false;
+}
+
+static bool pidff_check_err(struct pidff_usage *usage)
+{
+	bool ok = pidff_check(usage);
+
+	if (!ok)
+		pr_err("%s: usage invalid!\n", __func__);
+
+	return ok;
 }
 
 static s32 pidff_get(struct pidff_usage *usage)
@@ -457,7 +469,7 @@ static s32 pidff_get(struct pidff_usage *usage)
 
 static s32 pidff_get_safe(struct pidff_usage *usage, s32 fallback)
 {
-	if (!usage->value)
+	if (!pidff_check(usage))
 		return fallback;
 
 	return pidff_get(usage);
@@ -465,7 +477,7 @@ static s32 pidff_get_safe(struct pidff_usage *usage, s32 fallback)
 
 static void pidff_set_arr(struct pidff_usage *usage, uint index, s32 value)
 {
-	if (pidff_check(usage))
+	if (pidff_check_err(usage))
 		usage->value[index] = value;
 }
 
@@ -560,7 +572,7 @@ static void pidff_set_effect_type(struct pidff_device *pidff,
 	if (effect)
 		type = pidff_get_effect_type_id(pidff, effect);
 
-	pidff_set(pidff->set_effect_type, type);
+	pidff_set(&pidff->set_effect_type, type);
 }
 
 /* Copies EFFECT_BLOCK_INDEX from pidfff->block_load to target */
@@ -578,12 +590,12 @@ static void pidff_set_effect_direction(struct pidff_device *pidff,
 	const int direction_enable = 1;
 
 	/* Use fixed direction if needed */
-	if (pidff->quirks & HID_PIDFF_QUIRK_FIX_CONDITIONAL_DIRECTION &&
+	if (PIDFF_QUIRK(FIX_CONDITIONAL_DIRECTION) &&
 	    pidff_is_effect_conditional(effect))
 		direction = PIDFF_FIXED_WHEEL_DIRECTION;
 
 	pidff_set(&pidff->set_effect[PID_DIRECTION_ENABLE], direction_enable);
-	pidff_set_scaled(pidff->effect_direction, direction);
+	pidff_set_scaled(&pidff->effect_direction, direction);
 
 	if (direction_enable)
 		return;
@@ -597,12 +609,12 @@ static void pidff_set_effect_direction(struct pidff_device *pidff,
 		/* HID index starts with 1 */
 		int index = pidff->direction_axis_id[i] - 1;
 		u16 direction = pidff_rescale(direction, U16_MAX,
-					      pidff->effect_direction->field);
+					      pidff->effect_direction.field);
 		if (index < 0)
 			continue;
 
-		pidff_set_arr(pidff->axes_enable, index, 1);
-		pidff_set_arr(pidff->effect_direction, index, direction);
+		pidff_set_arr(&pidff->axes_enable, index, 1);
+		pidff_set_arr(&pidff->effect_direction, index, direction);
 	}
 }
 
@@ -747,7 +759,7 @@ static void pidff_set_condition_report(struct pidff_device *pidff,
 				       struct ff_effect *effect)
 {
 	/* Devices missing Parameter Block Offset can only have one axis */
-	int max_axis = pidff->quirks & HID_PIDFF_QUIRK_MISSING_PBO ? 1 : 2;
+	int max_axis = PIDFF_QUIRK(MISSING_PBO) ? 1 : 2;
 	struct pidff_usage *sc = pidff->set_condition;
 
 	pidff_copy_effect_block_index(pidff, sc);
@@ -837,7 +849,7 @@ static void pidff_set_gain_report(struct pidff_device *pidff, u16 gain)
  */
 static void pidff_set_device_control(struct pidff_device *pidff, int field)
 {
-	struct pidff_usage *dc = pidff->device_control;
+	struct pidff_usage *dc = &pidff->device_control;
 	const int field_index = pidff->control_id[field];
 	/* Detect if the field is a bitmask variable or an array */
 	const bool bitmask = dc->field->flags & HID_MAIN_ITEM_VARIABLE;
@@ -910,18 +922,18 @@ static int pidff_request_effect_upload(struct pidff_device *pidff, int efnum)
 	struct pidff_usage *bl = pidff->block_load;
 	s32 status = 0;
 
-	pidff_set(pidff->create_new_effect_type, efnum);
+	pidff_set(&pidff->create_new_effect_type, efnum);
 	pidff_hw_set(pidff, PID_CREATE_NEW_EFFECT, false);
 	hid_dbg(pidff->hid, "create_new_effect sent, type: %d\n", efnum);
 
 	pidff_set(&bl[PID_EFFECT_BLOCK_INDEX], 0);
-	pidff_set(pidff->block_load_status, 0);
+	pidff_set(&pidff->block_load_status, 0);
 	hid_hw_wait(pidff->hid);
 
 	for (int i = 0; i < PIDFF_BLOCK_LOAD_RETRIES; i++) {
 		hid_dbg(pidff->hid, "pid_block_load requested\n");
 		pidff_hw_get(pidff, PID_BLOCK_LOAD, true);
-		status = pidff_get(pidff->block_load_status);
+		status = pidff_get(&pidff->block_load_status);
 
 		if (status == pidff->status_id[PID_BLOCK_LOAD_SUCCESS]) {
 			hid_dbg(pidff->hid, "device reported free memory: %d bytes\n",
@@ -961,11 +973,11 @@ static void pidff_playback_pid(struct pidff_device *pidff, int pid_id, int n)
 	const u8 op = n ? PID_EFFECT_START : PID_EFFECT_STOP;
 
 	pidff_set(&pidff->effect_operation[PID_EFFECT_BLOCK_INDEX], pid_id);
-	pidff_set(pidff->effect_operation_status, pidff->operation_id[op]);
+	pidff_set(&pidff->effect_operation_status, pidff->operation_id[op]);
 	pidff_set_clamped(&pidff->effect_operation[PID_LOOP_COUNT], n);
 
 	pidff_hw_set(pidff, PID_EFFECT_OPERATION, false);
-	hid_dbg(pidff->hid, "%s PID effect %d", n ? "stop" : "play", pid_id);
+	hid_dbg(pidff->hid, "%s PID effect %d", n ? "play" : "stop", pid_id);
 }
 
 /*
@@ -1008,7 +1020,8 @@ static int pidff_erase_effect(struct input_dev *dev, int effect_id)
 	if(!pidff_get_effect_cnt(pidff))
 		return -EINVAL;
 
-	hid_dbg(pidff->hid, "starting to erase %d/%d\n", effect_id, pid_id);
+	hid_dbg(pidff->hid, "starting to erase effect %d -> PID[%d]\n",
+		effect_id, pid_id);
 
 	/*
 	 * Wait for the queue to clear. We do not want
@@ -1169,7 +1182,7 @@ static int pidff_find_field_with_usage(int *usage_index,
 	return -1;
 }
 
-#define PIDFF_MISSING_FIELD(name, quirks) \
+#define PIDFF_MISSING_FIELD(name) \
 	({ pr_debug("%s field not found, but that's OK\n", __stringify(name)); \
 	   pr_debug("Setting MISSING_%s quirk\n", __stringify(name)); \
 	   *quirks |= HID_PIDFF_QUIRK_MISSING_ ## name; })
@@ -1200,19 +1213,19 @@ static int pidff_find_fields(struct pidff_usage *usage, const u8 *table,
 
 		/* Field quirks auto-detection */
 		if (table[i] == pidff_set_effect[PID_START_DELAY])
-			PIDFF_MISSING_FIELD(DELAY, quirks);
+			PIDFF_MISSING_FIELD(DELAY);
 
 		else if (table[i] == pidff_set_condition[PID_PARAM_BLOCK_OFFSET])
-			PIDFF_MISSING_FIELD(PBO, quirks);
+			PIDFF_MISSING_FIELD(PBO);
 
 		else if (table[i] == pidff_set_condition[PID_NEG_COEFFICIENT])
-			PIDFF_MISSING_FIELD(NEG_COEFFICIENT, quirks);
+			PIDFF_MISSING_FIELD(NEG_COEFFICIENT);
 
 		else if (table[i] == pidff_set_condition[PID_NEG_SATURATION])
-			PIDFF_MISSING_FIELD(NEG_SATURATION, quirks);
+			PIDFF_MISSING_FIELD(NEG_SATURATION);
 
 		else if (table[i] == pidff_set_condition[PID_DEADBAND])
-			PIDFF_MISSING_FIELD(DEADBAND, quirks);
+			PIDFF_MISSING_FIELD(DEADBAND);
 
 		else if (strict) {
 			pr_debug("failed to locate %d\n", i);
@@ -1322,23 +1335,27 @@ static struct hid_field *pidff_find_special_field(struct hid_report *report,
 			continue;
 
 		if (enforce_min && field->logical_minimum != 1) {
-			pr_err("logical_minimum is not 1 as it should be\n");
+			pr_debug("logical_minimum is not 1 as it should be\n");
 			return NULL;
 		}
 
-		return report->field[i];
+		return field;
 	}
 	return NULL;
 }
 
 static void pidff_set_special_field(struct hid_report *report, uint usage,
-				    bool enforce_min,
-				    struct pidff_usage *special)
+				    struct pidff_usage *special,
+				    bool enforce_min)
 {
 	special->field = pidff_find_special_field(report, usage, enforce_min);
 	if (special->field)
 		special->value = special->field->value;
 }
+
+#define PIDFF_SET_SPECIAL_FIELD(report, usage, special, enforce_min) \
+	pidff_set_special_field(pidff->reports[report], usage,       \
+				&pidff->special, enforce_min)
 
 /*
  * Fill a pidff->*_id struct table
@@ -1361,11 +1378,11 @@ static int pidff_find_special_keys(int *keys, struct hid_field *fld,
 }
 
 #define PIDFF_FIND_SPECIAL_KEYS(keys, usage, name) \
-	pidff_find_special_keys(pidff->keys, pidff->usage->field, pidff_ ## name, \
+	pidff_find_special_keys(pidff->keys, pidff->usage.field, pidff_ ## name, \
 		ARRAY_SIZE(pidff_ ## name), HID_UP_PID)
 
 #define PIDFF_FIND_GENERAL_DESKTOP(keys, usage, name) \
-	pidff_find_special_keys(pidff->keys, pidff->usage->field, pidff_ ## name, \
+	pidff_find_special_keys(pidff->keys, pidff->usage.field, pidff_ ## name, \
 		ARRAY_SIZE(pidff_ ## name), HID_UP_GENDESK)
 
 /*
@@ -1373,62 +1390,61 @@ static int pidff_find_special_keys(int *keys, struct hid_field *fld,
  */
 static int pidff_find_special_fields(struct pidff_device *pidff)
 {
-	struct hid_report **rep = pidff->reports;
-
 	hid_dbg(pidff->hid, "finding special fields\n");
-	pidff_set_special_field(rep[PID_CREATE_NEW_EFFECT], PID_EFFECT_TYPE,
-				true, pidff->create_new_effect_type);
+	PIDFF_SET_SPECIAL_FIELD(PID_CREATE_NEW_EFFECT, PID_EFFECT_TYPE,
+				create_new_effect_type, true);
 
-	pidff_set_special_field(rep[PID_SET_EFFECT], PID_EFFECT_TYPE,
-				true, pidff->set_effect_type);
+	PIDFF_SET_SPECIAL_FIELD(PID_SET_EFFECT, PID_EFFECT_TYPE,
+				set_effect_type, true);
 
-	pidff_set_special_field(rep[PID_SET_EFFECT], PID_AXES_ENABLE,
-				false, pidff->axes_enable);
+	PIDFF_SET_SPECIAL_FIELD(PID_SET_EFFECT, PID_AXES_ENABLE,
+				axes_enable, false);
 
-	pidff_set_special_field(rep[PID_SET_EFFECT], PID_DIRECTION,
-				false, pidff->effect_direction);
+	PIDFF_SET_SPECIAL_FIELD(PID_SET_EFFECT, PID_DIRECTION,
+				effect_direction, false);
 
-	pidff_set_special_field(rep[PID_DEVICE_CONTROL], PID_DEVICE_CONTROL_ARRAY,
-				true, pidff->device_control);
+	PIDFF_SET_SPECIAL_FIELD(PID_DEVICE_CONTROL, PID_DEVICE_CONTROL_ARRAY,
+				device_control, true);
 
 	/* Detect and set permissive control quirk */
-	if (!pidff->device_control) {
+	if (!pidff_check(&pidff->device_control)) {
 		pr_debug("Setting PERMISSIVE_CONTROL quirk\n");
-		pidff->quirks |= HID_PIDFF_QUIRK_PERMISSIVE_CONTROL;
-		pidff_set_special_field(rep[PID_DEVICE_CONTROL],
-					PID_DEVICE_CONTROL_ARRAY, true,
-					pidff->device_control);
+		PIDFF_SET_QUIRK(PERMISSIVE_CONTROL);
+		PIDFF_SET_SPECIAL_FIELD(PID_DEVICE_CONTROL,
+					PID_DEVICE_CONTROL_ARRAY,
+					device_control, false);
 	}
 
-	pidff_set_special_field(rep[PID_BLOCK_LOAD], PID_BLOCK_LOAD_STATUS,
-				true, pidff->block_load_status);
+	PIDFF_SET_SPECIAL_FIELD(PID_BLOCK_LOAD, PID_BLOCK_LOAD_STATUS,
+				block_load_status, true);
 
-	pidff_set_special_field(rep[PID_EFFECT_OPERATION], PID_EFFECT_OPERATION_ARRAY,
-				true, pidff->effect_operation_status);
+	PIDFF_SET_SPECIAL_FIELD(PID_EFFECT_OPERATION, PID_EFFECT_OPERATION_ARRAY,
+				effect_operation_status, true);
 
 	hid_dbg(pidff->hid, "search done\n");
 
-	if (!pidff->create_new_effect_type || !pidff->set_effect_type) {
+	if (!pidff_check(&pidff->create_new_effect_type) ||
+	    !pidff_check(&pidff->set_effect_type)) {
 		hid_err(pidff->hid, "effect lists not found\n");
 		return -1;
 	}
 
-	if (!pidff->effect_direction) {
+	if (!pidff_check(&pidff->effect_direction)) {
 		hid_err(pidff->hid, "direction field not found\n");
 		return -1;
 	}
 
-	if (!pidff->device_control) {
+	if (!pidff_check(&pidff->device_control)) {
 		hid_err(pidff->hid, "device control field not found\n");
 		return -1;
 	}
 
-	if (!pidff->block_load_status) {
+	if (!pidff_check(&pidff->block_load_status)) {
 		hid_err(pidff->hid, "block load status field not found\n");
 		return -1;
 	}
 
-	if (!pidff->effect_operation_status) {
+	if (!pidff_check(&pidff->effect_operation_status)) {
 		hid_err(pidff->hid, "effect operation field not found\n");
 		return -1;
 	}
@@ -1443,7 +1459,7 @@ static int pidff_find_special_fields(struct pidff_device *pidff)
 
 	if (PIDFF_FIND_SPECIAL_KEYS(status_id, block_load_status,
 				    block_load_status) !=
-		ARRAY_SIZE(pidff_block_load_status)) {
+	    ARRAY_SIZE(pidff_block_load_status)) {
 		hid_err(pidff->hid,
 			"block load status identifiers not found\n");
 		return -1;
@@ -1456,12 +1472,12 @@ static int pidff_find_special_fields(struct pidff_device *pidff)
 		return -1;
 	}
 
-	if (!pidff->axes_enable) {
+	if (!pidff_check(&pidff->axes_enable)) {
 		hid_info(pidff->hid, "axes enable field not found!\n");
 		return 0;
 	}
 
-	uint report_count = pidff->axes_enable->field->report_count;
+	uint report_count = pidff->axes_enable.field->report_count;
 
 	pidff->axis_count = PIDFF_FIND_GENERAL_DESKTOP(
 		direction_axis_id, axes_enable, direction_axis);
@@ -1489,8 +1505,8 @@ static int pidff_find_special_fields(struct pidff_device *pidff)
  */
 static int pidff_find_effects(struct pidff_device *pidff, struct input_dev *dev)
 {
-	struct hid_field *ste = pidff->set_effect_type->field;
-	struct hid_field *cte = pidff->create_new_effect_type->field;
+	struct hid_field *ste = pidff->set_effect_type.field;
+	struct hid_field *cte = pidff->create_new_effect_type.field;
 
 	for (int i = 0; i < ARRAY_SIZE(pidff_effect_types); i++) {
 		/* HID uses 1-based indexing */
@@ -1695,7 +1711,7 @@ int hid_pidff_init_with_quirks(struct hid_device *hid, u32 initial_quirks)
 	    pidff->block_load[PID_EFFECT_BLOCK_INDEX].field->logical_minimum +
 	    1;
 
-	pidff->max_effects = MAX(pidff->max_effects, PID_EFFECTS_MAX);
+	pidff->max_effects = MIN(pidff->max_effects, PID_EFFECTS_MAX);
 
 	hid_dbg(hid, "max effects is %d\n", pidff->max_effects);
 	hid_dbg(hid, "max simultaneous effects is %d\n",
