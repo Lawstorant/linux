@@ -1268,17 +1268,7 @@ static int pidff_find_special_fields(struct pidff_device *pidff)
 					 PID_DIRECTION, 0);
 	pidff->device_control =
 		pidff_find_special_field(pidff->reports[PID_DEVICE_CONTROL],
-			PID_DEVICE_CONTROL_ARRAY, 1);
-
-	/* Detect and set permissive control quirk */
-	if (!pidff->device_control) {
-		pr_debug("Setting PERMISSIVE_CONTROL quirk\n");
-		pidff->quirks |= HID_PIDFF_QUIRK_PERMISSIVE_CONTROL;
-		pidff->device_control = pidff_find_special_field(
-			pidff->reports[PID_DEVICE_CONTROL],
-			PID_DEVICE_CONTROL_ARRAY, 0);
-	}
-
+					 PID_DEVICE_CONTROL_ARRAY, 0);
 	pidff->block_load_status =
 		pidff_find_special_field(pidff->reports[PID_BLOCK_LOAD],
 					 PID_BLOCK_LOAD_STATUS, 1);

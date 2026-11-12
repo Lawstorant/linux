@@ -12,9 +12,6 @@
 /* Missing Paramter block offset (0x23). Skip it during SET_CONDITION upload */
 #define HID_PIDFF_QUIRK_MISSING_PBO		BIT(1)
 
-/* Initialise device control field even if logical_minimum != 1 */
-#define HID_PIDFF_QUIRK_PERMISSIVE_CONTROL	BIT(2)
-
 /* Use fixed 0x4000 direction during SET_EFFECT report upload */
 #define HID_PIDFF_QUIRK_FIX_CONDITIONAL_DIRECTION	BIT(3)
 
