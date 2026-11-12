@@ -1287,31 +1287,35 @@ static int pidff_find_special_fields(struct pidff_device *pidff)
 					 PID_EFFECT_OPERATION_ARRAY, true);
 
 	hid_dbg(pidff->hid, "search done\n");
+	bool failed = false;
 
 	if (!pidff->create_new_effect_type || !pidff->set_effect_type) {
 		hid_err(pidff->hid, "effect lists not found\n");
-		return -1;
+		failed = true;
 	}
 
 	if (!pidff->effect_direction) {
 		hid_err(pidff->hid, "direction field not found\n");
-		return -1;
+		failed = true;
 	}
 
 	if (!pidff->device_control) {
 		hid_err(pidff->hid, "device control field not found\n");
-		return -1;
+		failed = true;
 	}
 
 	if (!pidff->block_load_status) {
 		hid_err(pidff->hid, "block load status field not found\n");
-		return -1;
+		failed = true;
 	}
 
 	if (!pidff->effect_operation_status) {
 		hid_err(pidff->hid, "effect operation field not found\n");
-		return -1;
+		failed = true;
 	}
+
+	if (failed)
+		return -1;
 
 	PIDFF_FIND_SPECIAL_KEYS(control_id, device_control, device_control);
 
