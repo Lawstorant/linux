@@ -154,8 +154,9 @@ static const u8 pidff_effect_pid_to_ff[] = {
 static const u8 pidff_block_load_status[] = { 0x8c, 0x8d, 0x8e };
 
 #define PID_EFFECT_START	0
-#define PID_EFFECT_STOP		1
-static const u8 pidff_effect_operation_status[] = { 0x79, 0x7b };
+#define PID_EFFECT_START_SOLO	1
+#define PID_EFFECT_STOP		2
+static const u8 pidff_effect_operation_status[] = { 0x79, 0x7a, 0x7b };
 
 #define PID_DIRECTION_NORTH	0x0000
 #define PID_DIRECTION_EAST	0x4000
@@ -1024,10 +1025,17 @@ static bool pidff_needs_playback(struct pidff_device *pidff, int effect_id, int 
 
 /*
  * Play the effect with @pid_id @n times
+ * TODO: support infinite value for loops
  */
-static void pidff_playback_pid(struct pidff_device *pidff, int pid_id, int n)
+static void pidff_playback_pid(struct pidff_device *pidff, int pid_id, int n,
+			       bool solo)
 {
-	const u8 op = n ? PID_EFFECT_START : PID_EFFECT_STOP;
+	u8 op = PID_EFFECT_STOP;
+
+	if (n && solo)
+		op = PID_EFFECT_START_SOLO;
+	else if (n)
+		op = PID_EFFECT_START;
 
 	pidff_set(&pidff->effect_operation[PID_EFFECT_BLOCK_INDEX], pid_id);
 	pidff_set(&pidff->effect_operation_status, pidff->operation_id[op]);
@@ -1052,7 +1060,7 @@ static int pidff_playback(struct input_dev *dev, int effect_id, int value)
 		value == 0 ? "stop" : "playback", effect_id);
 
 	effect->loop_count = value;
-	pidff_playback_pid(pidff, effect->pid_id, value);
+	pidff_playback_pid(pidff, effect->pid_id, value, false);
 	return 0;
 }
 
@@ -1082,7 +1090,7 @@ static int pidff_erase_effect(struct input_dev *dev, int effect_id)
 	 * a full fifo to prevent the effect removal.
 	 */
 	hid_hw_wait(pidff->hid);
-	pidff_playback_pid(pidff, pid_id, 0);
+	pidff_playback_pid(pidff, pid_id, 0, false);
 	pidff_erase_pid(pidff, pid_id);
 
 	if (pidff->effect_count > 0)
@@ -1179,11 +1187,11 @@ static void pidff_autocenter(struct pidff_device *pidff, u16 magnitude)
 		pidff->block_load[PID_EFFECT_BLOCK_INDEX].field;
 
 	if (!magnitude) {
-		pidff_playback_pid(pidff, field->logical_minimum, 0);
+		pidff_playback_pid(pidff, field->logical_minimum, 0, false);
 		return;
 	}
 
-	pidff_playback_pid(pidff, field->logical_minimum, 1);
+	pidff_playback_pid(pidff, field->logical_minimum, 1, false);
 
 	pidff->set_effect[PID_EFFECT_BLOCK_INDEX].value[0] =
 		pidff->block_load[PID_EFFECT_BLOCK_INDEX].field->logical_minimum;
