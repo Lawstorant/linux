@@ -222,7 +222,7 @@ struct pidff_device {
 	struct pidff_usage effect_operation[ARRAY_SIZE(pidff_effect_operation)];
 	struct pidff_usage block_free[ARRAY_SIZE(pidff_block_free)];
 
-	struct pidff_effect effect[PID_EFFECTS_MAX];
+	struct pidff_effect effect[PID_EFFECTS_MAX] __counted_by(max_effects);
 
 	/* Special field in create_new_effect */
 	struct pidff_usage create_new_effect_type;
