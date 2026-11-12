@@ -25,6 +25,7 @@
 /* Linux Force Feedback API uses miliseconds as time unit */
 #define FF_TIME_EXPONENT	-3
 #define FF_INFINITE		0
+#define FF_LOOP_COUNT_INFINITE	-1
 #define FF_ATTACK_MAX		S16_MAX
 #define FF_FADE_MAX		FF_ATTACK_MAX
 
@@ -575,19 +576,24 @@ static void pidff_set_time(struct pidff_usage *usage, u16 time)
 	pidff_set(usage, rescaled);
 }
 
+static void pidff_set_infinite(struct pidff_usage *usage)
+{
+	uint report_size = usage->field->report_size;
+	int value = -1;
+
+	/* PID defines INFINITE as the max possible value for a given field */
+	if (report_size < 32)
+		value = (1U << report_size) - 1;
+
+	pidff_set(usage, value);
+}
+
 static void pidff_set_duration(struct pidff_usage *usage, u16 duration)
 {
-	/* PID defines INFINITE as the max possible value for duration field */
 	if (pidff_is_duration_infinite(duration)) {
-		uint report_size = usage->field->report_size;
-
-		pidff_set(usage, -1);
-		if (report_size < 32)
-			pidff_set(usage, (1U << report_size) - 1);
-
+		pidff_set_infinite(usage);
 		return;
 	}
-
 	pidff_set_time(usage, duration);
 }
 
@@ -1014,18 +1020,7 @@ static int pidff_request_effect_upload(struct pidff_device *pidff, int efnum)
 }
 
 /*
- * Effect needs playback if it's not infinite or if loop_count for an infinite
- * effect has changed (may be going from n -> 0)
- */
-static bool pidff_needs_playback(struct pidff_device *pidff, int effect_id, int n)
-{
-	return !pidff->effect[effect_id].is_infinite ||
-		pidff->effect[effect_id].loop_count != n;
-}
-
-/*
  * Play the effect with @pid_id @n times
- * TODO: support infinite value for loops
  */
 static void pidff_playback_pid(struct pidff_device *pidff, int pid_id, int n,
 			       bool solo)
@@ -1039,7 +1034,11 @@ static void pidff_playback_pid(struct pidff_device *pidff, int pid_id, int n,
 
 	pidff_set(&pidff->effect_operation[PID_EFFECT_BLOCK_INDEX], pid_id);
 	pidff_set(&pidff->effect_operation_status, pidff->operation_id[op]);
-	pidff_set_clamped(&pidff->effect_operation[PID_LOOP_COUNT], n);
+
+	if (n == FF_LOOP_COUNT_INFINITE)
+		pidff_set_infinite(&pidff->effect_operation[PID_LOOP_COUNT]);
+	else
+		pidff_set_clamped(&pidff->effect_operation[PID_LOOP_COUNT], n);
 
 	pidff_hw_set(pidff, PID_EFFECT_OPERATION, false);
 	hid_dbg(pidff->hid, "%s PID effect %d", n ? "play" : "stop", pid_id);
@@ -1053,7 +1052,13 @@ static int pidff_playback(struct input_dev *dev, int effect_id, int value)
 	struct pidff_device *pidff = dev->ff->private;
 	struct pidff_effect *effect = &pidff->effect[effect_id];
 
-	if (!pidff_needs_playback(pidff, effect_id, value))
+	if (value < FF_LOOP_COUNT_INFINITE)
+		return -EINVAL;
+	/*
+	 * Effect needs playback if it's not infinite or if loop_count for
+	 * an infinite effect has changed (may be going from n -> 0)
+	 */
+	if (effect->is_infinite && effect->loop_count == value)
 		return 0;
 
 	hid_dbg(pidff->hid, "requesting %s on FF effect %d",
